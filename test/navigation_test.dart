@@ -99,7 +99,7 @@ void main() {
     await tester.tap(find.bySemanticsLabel(RegExp('Ask Chef AI')).last);
     await settle(tester);
     expect(find.text('Chef AI'), findsOneWidget);
-    expect(find.text('I have only 20 minutes.'), findsOneWidget);
+    expect(find.text('Sirf 20 minute hain, kya banau?'), findsOneWidget);
     semantics.dispose();
   });
 }

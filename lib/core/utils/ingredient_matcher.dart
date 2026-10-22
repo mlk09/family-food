@@ -31,6 +31,11 @@ class IngredientNames {
     'scallion': 'spring onion', 'green onion': 'spring onion',
     'groundnuts': 'peanuts', 'moongphali': 'peanuts', 'flattened rice': 'poha',
     'cucumbers': 'cucumber', 'kheera': 'cucumber',
+    'baingan': 'brinjal', 'eggplant': 'brinjal', 'mirchi': 'green chilli', 'aata': 'wheat flour',
+    'dal': 'toor dal', 'daal': 'toor dal', 'moong daal': 'moong dal', 'rajmah': 'rajma',
+    'chana dal': 'chana dal', 'pudina': 'mint', 'lauki': 'bottle gourd', 'mooli': 'radish',
+    'patta gobhi': 'cabbage', 'band gobhi': 'cabbage', 'phool gobhi': 'cauliflower', 'gobhi': 'cauliflower',
+    'murga': 'chicken', 'macchi': 'fish', 'machli': 'fish', 'cheeni': 'sugar', 'namak': 'salt',
   };
 
   static String normalize(String raw) {

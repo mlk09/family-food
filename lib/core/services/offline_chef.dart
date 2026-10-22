@@ -87,13 +87,15 @@ class OfflineChef {
     final filtersBase = MatchFilters(diet: p?.diet, allergies: p?.allergies ?? const []);
     String list(List<RecipeMatch> m) => m.isEmpty
         ? 'I could not find a match in my offline recipe book — try adding a few more ingredients.'
-        : m.take(3).map((e) => '• ${e.recipe.emoji} **${e.recipe.name}** — ${e.recipe.totalTime} min'
+        : m.take(5).map((e) => '• ${e.recipe.emoji} **${e.recipe.name}** — ${e.recipe.totalTime} min'
             '${e.missing.isEmpty ? '' : ' (need: ${e.missing.take(2).join(', ')})'}').join('\n');
 
     // Substitution questions: "I don't have onions", "without eggs", "instead of"
-    final subMatch = RegExp(r"(?:don'?t have|do not have|no|without|instead of|out of|replace|substitute(?: for)?)\s+(?:any\s+)?([a-z ]{3,25})").firstMatch(q);
+    final subMatch = RegExp(r"(?:don'?t have|do not have|no|without|instead of|out of|replace|substitute(?: for)?|bina)\s+(?:any\s+)?([a-z ]{3,25})").firstMatch(q) ??
+        // Hinglish: "pyaz nahi hai", "ande nahi hain"
+        RegExp(r"([a-z]{3,20}) (?:nahi|nhi|nahin)\b").firstMatch(q);
     if (subMatch != null) {
-      final raw = subMatch.group(1)!.trim().split(RegExp(r'\s+(?:what|can|in|for|\?)')).first.trim();
+      final raw = subMatch.group(1)!.trim().split(RegExp(r'\s+(?:what|can|in|for|ke|ka|kya|\?)')).first.trim();
       final key = IngredientNames.normalize(raw);
       final subs = substitutions[key];
       if (subs != null) {
@@ -103,29 +105,29 @@ class OfflineChef {
     }
 
     final minutes = RegExp(r'(\d+)\s*(?:min|minute)').firstMatch(q);
-    if (minutes != null || q.contains('quick') || q.contains('fast') || q.contains('hurry')) {
+    if (minutes != null || q.contains('quick') || q.contains('fast') || q.contains('hurry') || q.contains('jaldi')) {
       final m = int.tryParse(minutes?.group(1) ?? '') ?? 25;
       final res = IngredientMatcher.match(pantry, filters: MatchFilters(diet: p?.diet, allergies: p?.allergies ?? const [], maxMinutes: m));
       return 'Here is what you can make in about $m minutes with your kitchen ⏱️\n${list(res)}';
     }
 
-    if (q.contains('child') || q.contains('kid') || q.contains('school') || q.contains('tiffin')) {
+    if (q.contains('child') || q.contains('kid') || q.contains('school') || q.contains('tiffin') || q.contains('bacch') || q.contains('bachch') || q.contains('bache')) {
       final res = IngredientMatcher.match(pantry, filters: MatchFilters(diet: p?.diet, allergies: p?.allergies ?? const [], kidsOnly: true));
       return 'Kid-friendly ideas 🧒 (mild spice, easy to eat):\n${list(res)}\n\n'
           '🛡️ Children should cook only with an adult nearby, especially around knives, hot oil and stoves.';
     }
 
-    if (q.contains('spicy') || q.contains('spice') || q.contains('mild')) {
+    if (q.contains('spicy') || q.contains('spice') || q.contains('mild') || q.contains('teekha') || q.contains('tikha') || q.contains('mirch')) {
       return 'To make a dish less spicy 🌶️➡️🥛:\n• Skip or de-seed green chillies\n• Halve the red chilli powder and garam masala\n'
           '• Add a spoon of curd, cream or milk at the end\n• A pinch of sugar balances heat\n• Serve with plain rice or raita';
     }
 
-    if (q.contains('healthy') || q.contains('light') || q.contains('diet')) {
+    if (q.contains('healthy') || q.contains('light') || q.contains('diet') || q.contains('halka') || q.contains('sehat')) {
       final healthy = IngredientMatcher.match(pantry, filters: filtersBase).where((e) => e.recipe.tags.contains('healthy')).toList();
       return 'Healthy picks from your kitchen 🥗:\n${list(healthy)}\n\nTip: add a bowl of salad or curd for extra protein and fibre.';
     }
 
-    final budget = RegExp(r'(?:₹|rs\.?|inr|rupees?)\s*(\d+)|(\d+)\s*(?:₹|rs|rupees?)').firstMatch(q);
+    final budget = RegExp(r'(?:₹|rs\.?|inr|rupees?|rupa?ye?)\s*(\d+)|(\d+)\s*(?:₹|rs|rupees?|rupa?ye?)').firstMatch(q);
     if (budget != null || q.contains('budget') || q.contains('cheap')) {
       final amt = budget?.group(1) ?? budget?.group(2);
       final res = IngredientMatcher.match(pantry, filters: filtersBase).where((e) => e.recipe.tags.contains('budget')).toList();
@@ -133,11 +135,12 @@ class OfflineChef {
           'Dal, rice, eggs, potatoes and seasonal vegetables give the most nutrition per rupee.';
     }
 
-    if (q.contains('breakfast')) {
+    if (q.contains('breakfast') || q.contains('nashta') || q.contains('nashte')) {
       return 'Breakfast ideas 🍳\n${list(IngredientMatcher.match(pantry, filters: MatchFilters(diet: p?.diet, allergies: p?.allergies ?? const [], mealType: 'breakfast')))}';
     }
 
-    if (q.contains('dinner') || q.contains('lunch') || q.contains('cook') || q.contains('make') || q.contains('what')) {
+    if (q.contains('dinner') || q.contains('lunch') || q.contains('cook') || q.contains('make') || q.contains('what') ||
+        q.contains('banau') || q.contains('banaun') || q.contains('banaye') || q.contains('bana') || q.contains('khana')) {
       return 'Based on your kitchen, I suggest 👩‍🍳\n${list(IngredientMatcher.match(pantry, filters: filtersBase))}';
     }
 

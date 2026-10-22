@@ -105,6 +105,11 @@ class AIService {
 
   bool get isAvailable => _baseUrl != null;
 
+  static const loginNeeded = AppFailure(
+    FailureKind.auth,
+    'Online Chef AI needs a free account — log in from Profile. (Demo Mode uses offline answers.)',
+  );
+
   Uri get _endpoint => Uri.parse('$_baseUrl/functions/v1/${Env.aiFunctionName}');
 
   Map<String, String> get _headers {
@@ -133,6 +138,7 @@ class AIService {
     if (res.statusCode == 429) {
       throw const AppFailure(FailureKind.ai, "You've reached today's Chef AI limit. Try again tomorrow!");
     }
+    if (res.statusCode == 401) throw loginNeeded;
     if (res.statusCode != 200) {
       debugPrint('AI $action failed ${res.statusCode}: ${res.body}');
       throw AppFailure.aiBreak;
@@ -224,6 +230,7 @@ class AIService {
     if (res.statusCode == 429) {
       throw const AppFailure(FailureKind.ai, "You've reached today's Chef AI limit. Try again tomorrow!");
     }
+    if (res.statusCode == 401) throw loginNeeded;
     if (res.statusCode != 200) throw AppFailure.aiBreak;
     yield* res.stream.transform(utf8.decoder).timeout(_timeout);
   }

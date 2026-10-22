@@ -1,0 +1,70 @@
+# One-click backend setup: deploys Chef AI (OpenAI) to your Supabase project and
+# rebuilds the app so it connects to Supabase.
+#
+# Add these in Settings → Secrets and variables → Actions → New repository secret:
+#   SUPABASE_URL            https://<project-ref>.supabase.co
+#   SUPABASE_ANON_KEY       Supabase → Project Settings → API Keys (anon / publishable)
+#   SUPABASE_ACCESS_TOKEN   https://supabase.com/dashboard/account/tokens → Generate new token
+#   OPENAI_API_KEY          https://platform.openai.com/api-keys
+# Then: Actions → setup-backend → Run workflow.
+name: setup-backend
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write   # to start the "build" workflow afterwards
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+      SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Check secrets
+        run: |
+          missing=""
+          for v in SUPABASE_URL SUPABASE_ANON_KEY SUPABASE_ACCESS_TOKEN OPENAI_API_KEY; do
+            [ -z "${!v}" ] && missing="$missing $v"
+          done
+          if [ -n "$missing" ]; then
+            echo "::error::Missing repository secrets:$missing (Settings → Secrets and variables → Actions)"
+            exit 1
+          fi
+          REF=$(echo "$SUPABASE_URL" | sed -E 's#^https://([a-z0-9]+)\.supabase\.co/?$#\1#')
+          if [ "$REF" = "$SUPABASE_URL" ] || [ -z "$REF" ]; then
+            echo "::error::SUPABASE_URL must look like https://abcdefgh.supabase.co"
+            exit 1
+          fi
+          echo "PROJECT_REF=$REF" >> "$GITHUB_ENV"
+          echo "Supabase project: $REF"
+
+      - uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Store OpenAI key as a server-side secret (never in the app)
+        run: supabase secrets set --project-ref "$PROJECT_REF" OPENAI_API_KEY="$OPENAI_API_KEY" DAILY_AI_LIMIT=80
+
+      - name: Deploy Edge Functions
+        run: |
+          supabase functions deploy chef-ai --project-ref "$PROJECT_REF" --no-verify-jwt
+          supabase functions deploy delete-account --project-ref "$PROJECT_REF" --no-verify-jwt
+
+      - name: Check Chef AI is reachable
+        run: |
+          code=$(curl -s -o /tmp/r.txt -w '%{http_code}' -X POST "$SUPABASE_URL/functions/v1/chef-ai" \
+            -H "Content-Type: application/json" -d '{"action":"chat","messages":[]}')
+          echo "chef-ai answered HTTP $code (401 = deployed and correctly asking for login)"
+          cat /tmp/r.txt; echo
+          [ "$code" = "401" ] || [ "$code" = "400" ] || { echo "::warning::Unexpected response — check Supabase → Edge Functions → chef-ai → Logs"; }
+
+      - name: Rebuild the app with Supabase connected
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: gh workflow run build.yml --repo "${{ github.repository }}" --ref main

@@ -111,7 +111,10 @@ final routerProvider = Provider<GoRouter>((ref) {
         path: Routes.chef,
         pageBuilder: (_, s) => MaterialPage(
           fullscreenDialog: true,
-          child: ChefChatScreen(recipe: s.extra is Recipe ? s.extra as Recipe : null),
+          child: ChefChatScreen(
+            recipe: s.extra is Recipe ? s.extra as Recipe : null,
+            initialQuestion: s.extra is String ? s.extra as String : null,
+          ),
         ),
       ),
       GoRoute(path: Routes.family, builder: (_, _) => const FamilyScreen()),

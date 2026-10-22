@@ -9,8 +9,11 @@ import '../../widgets/common.dart';
 import 'ai_providers.dart';
 
 class ChefChatScreen extends ConsumerStatefulWidget {
-  const ChefChatScreen({super.key, this.recipe});
+  const ChefChatScreen({super.key, this.recipe, this.initialQuestion});
   final Recipe? recipe;
+
+  /// Sent automatically when the screen opens (from Home shortcuts).
+  final String? initialQuestion;
 
   @override
   ConsumerState<ChefChatScreen> createState() => _ChefChatScreenState();
@@ -21,23 +24,27 @@ class _ChefChatScreenState extends ConsumerState<ChefChatScreen> {
   final _scroll = ScrollController();
 
   static const _general = [
-    "I don't have onions. What can I use?",
-    'I have only 20 minutes.',
-    'What can I cook for children?',
+    'Mere paas jo hai usse kya banau?',
+    'Pyaz nahi hai, kya use karun?',
+    'Sirf 20 minute hain, kya banau?',
+    'Bachchon ke liye kya banau?',
+    '₹300 mein family ke liye kya banau?',
     'Give me a healthy dinner.',
-    'I have ₹300. What can I cook for my family?',
   ];
   static const _forRecipe = [
-    'Can I make this without eggs?',
-    'Make this less spicy.',
-    'How do I make it healthier?',
-    'Can I make it in 20 minutes?',
+    'Kya ise bina ande ke bana sakte hain?',
+    'Ise kam teekha kaise banau?',
+    'Ise healthy kaise banau?',
+    'Kya ye 20 minute mein ban sakta hai?',
   ];
 
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) => ref.read(chatProvider.notifier).attachRecipe(widget.recipe));
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(chatProvider.notifier).attachRecipe(widget.recipe);
+      if (widget.initialQuestion != null) _send(widget.initialQuestion);
+    });
   }
 
   @override
@@ -200,7 +207,7 @@ class _ChefChatScreenState extends ConsumerState<ChefChatScreen> {
                     textInputAction: TextInputAction.send,
                     onSubmitted: (_) => _send(),
                     style: const TextStyle(fontSize: 17),
-                    decoration: const InputDecoration(hintText: 'Ask Chef AI anything…', counterText: ''),
+                    decoration: const InputDecoration(hintText: 'Chef se poocho… (Hindi / English)', counterText: ''),
                   ),
                 ),
                 const SizedBox(width: 10),
