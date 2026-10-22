@@ -139,10 +139,7 @@ class AIService {
       throw const AppFailure(FailureKind.ai, "You've reached today's Chef AI limit. Try again tomorrow!");
     }
     if (res.statusCode == 401) throw loginNeeded;
-    if (res.statusCode != 200) {
-      debugPrint('AI $action failed ${res.statusCode}: ${res.body}');
-      throw AppFailure.aiBreak;
-    }
+    if (res.statusCode != 200) _throwServerError(res.statusCode, utf8.decode(res.bodyBytes, allowMalformed: true));
     try {
       final decoded = jsonDecode(utf8.decode(res.bodyBytes));
       if (decoded is Map<String, dynamic>) return decoded;
@@ -231,8 +228,36 @@ class AIService {
       throw const AppFailure(FailureKind.ai, "You've reached today's Chef AI limit. Try again tomorrow!");
     }
     if (res.statusCode == 401) throw loginNeeded;
-    if (res.statusCode != 200) throw AppFailure.aiBreak;
+    if (res.statusCode != 200) _throwServerError(res.statusCode, await res.stream.bytesToString());
     yield* res.stream.transform(utf8.decoder).timeout(_timeout);
+  }
+
+  /// Maps the Edge Function's error codes to messages that say what to fix.
+  static Never _throwServerError(int status, String body) {
+    String? error, detail;
+    try {
+      final j = jsonDecode(body);
+      if (j is Map) {
+        error = j['error']?.toString();
+        detail = j['detail']?.toString();
+      }
+    } catch (_) {}
+    debugPrint('AI error $status: $error / $detail');
+    if (error == 'ai_not_configured') {
+      throw const AppFailure(FailureKind.ai, 'Chef AI is not set up yet (OpenAI key missing on the server).');
+    }
+    switch (detail) {
+      case 'insufficient_quota':
+      case 'billing_not_active':
+        throw const AppFailure(FailureKind.ai, 'Chef AI needs OpenAI credit. Add billing/credit at platform.openai.com, then try again.');
+      case 'invalid_api_key':
+        throw const AppFailure(FailureKind.ai, 'The OpenAI key on the server is not valid. Please create a new key and update it.');
+      case 'model_not_found':
+        throw const AppFailure(FailureKind.ai, "The OpenAI account can't use the selected model. Check OPENAI_MODEL.");
+      case 'rate_limit_exceeded':
+        throw const AppFailure(FailureKind.ai, 'Chef AI is busy right now. Please try again in a minute.');
+    }
+    throw AppFailure.aiBreak;
   }
 
   // ── Validation helpers (public for tests) ──

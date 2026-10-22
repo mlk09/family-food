@@ -56,6 +56,18 @@ async function openai(body: Record<string, unknown>, signal: AbortSignal): Promi
   });
 }
 
+/** Logs an OpenAI failure and returns a safe error with OpenAI's error code (no secrets). */
+async function upstreamError(req: Request, label: string, res: Response): Promise<Response> {
+  const text = await res.text();
+  console.error("openai", label, res.status, text);
+  let detail = `http_${res.status}`;
+  try {
+    const e = JSON.parse(text)?.error;
+    detail = String(e?.code || e?.type || detail);
+  } catch { /* not JSON */ }
+  return json(req, { error: "ai_unavailable", detail }, 502);
+}
+
 /** Re-checks structured output server-side; the app validates again. */
 // deno-lint-ignore no-explicit-any
 function sanitize(action: string, data: any): any {
@@ -135,8 +147,7 @@ Deno.serve(async (req) => {
         ],
       }, controller.signal);
       if (!upstream.ok || !upstream.body) {
-        console.error("openai chat", upstream.status, await upstream.text());
-        return json(req, { error: "ai_unavailable" }, 502);
+        return await upstreamError(req, "chat", upstream);
       }
       // Convert OpenAI SSE into a plain text stream of content deltas.
       const decoder = new TextDecoder();
@@ -193,8 +204,7 @@ Deno.serve(async (req) => {
         ],
       }, controller.signal);
       if (!res.ok) {
-        console.error("openai vision", res.status, await res.text());
-        return json(req, { error: "ai_unavailable" }, 502);
+        return await upstreamError(req, "vision", res);
       }
       const out = await res.json();
       return json(req, JSON.parse(out.choices?.[0]?.message?.content ?? "{\"ingredients\":[]}"));
@@ -212,8 +222,7 @@ Deno.serve(async (req) => {
       ],
     }, controller.signal);
     if (!res.ok) {
-      console.error("openai", action, res.status, await res.text());
-      return json(req, { error: "ai_unavailable" }, 502);
+      return await upstreamError(req, action, res);
     }
     const out = await res.json();
     const content = out.choices?.[0]?.message?.content;

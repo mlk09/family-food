@@ -1,0 +1,63 @@
+# Checks the whole Chef AI chain and reports problems as annotations (no secrets shown):
+#   1. OpenAI key + billing   2. Edge Function reachable   3. A real Chef AI answer
+# Step 3 signs up a throwaway test user and deletes it again afterwards.
+name: diagnose-ai
+
+on:
+  workflow_dispatch:
+
+jobs:
+  diagnose:
+    runs-on: ubuntu-latest
+    env:
+      RAW_URL: ${{ secrets.SUPABASE_URL }}
+      ANON: ${{ secrets.SUPABASE_ANON_KEY }}
+      OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: 1 · OpenAI key and billing
+        run: |
+          code=$(curl -s -o r.json -w '%{http_code}' https://api.openai.com/v1/chat/completions \
+            -H "Authorization: Bearer $OPENAI_API_KEY" -H "Content-Type: application/json" \
+            -d '{"model":"gpt-4o-mini","messages":[{"role":"user","content":"Say OK"}],"max_completion_tokens":5}')
+          if [ "$code" = "200" ]; then
+            echo "::notice title=OpenAI OK::Key works and billing is active (gpt-4o-mini answered)."
+          else
+            err=$(jq -r '.error.code // .error.type // "unknown"' r.json 2>/dev/null)
+            msg=$(jq -r '.error.message // ""' r.json 2>/dev/null | cut -c1-200)
+            echo "::error title=OpenAI failed (HTTP $code, $err)::$msg"
+          fi
+
+      - name: 2 · Edge Function deployed
+        run: |
+          URL=$(.github/scripts/normalize_supabase_url.sh "$RAW_URL")
+          echo "URL=$URL" >> "$GITHUB_ENV"
+          code=$(curl -s -o r.json -w '%{http_code}' -X POST "$URL/functions/v1/chef-ai" -H "Content-Type: application/json" -d '{}')
+          case "$code" in
+            401) echo "::notice title=chef-ai deployed::Function is online and requires login (correct)." ;;
+            503) echo "::error title=chef-ai::OPENAI_API_KEY is not set on Supabase — run setup-backend." ;;
+            404) echo "::error title=chef-ai::Function not found — run setup-backend." ;;
+            *)   echo "::warning title=chef-ai HTTP $code::$(head -c 200 r.json)" ;;
+          esac
+
+      - name: 3 · Real Chef AI answer (temporary test user)
+        run: |
+          EMAIL="diag-$(date +%s)-$RANDOM@example.com"; PASS="Diag-$RANDOM-$RANDOM-x"
+          curl -s -o s.json "$URL/auth/v1/signup" -H "apikey: $ANON" -H "Content-Type: application/json" \
+            -d "{\"email\":\"$EMAIL\",\"password\":\"$PASS\"}"
+          TOKEN=$(jq -r '.access_token // empty' s.json)
+          if [ -z "$TOKEN" ]; then
+            echo "::error title=Sign-up test failed::$(jq -r '.msg // .error_description // .message // "no session — is Confirm email still ON?"' s.json | cut -c1-200)"
+            exit 0
+          fi
+          code=$(curl -s -o c.json -w '%{http_code}' -X POST "$URL/functions/v1/chef-ai" \
+            -H "Authorization: Bearer $TOKEN" -H "apikey: $ANON" -H "Content-Type: application/json" \
+            -d '{"action":"substitutions","ingredient":"onion","context":{"ingredients":[{"name":"tomato"}]}}')
+          if [ "$code" = "200" ]; then
+            echo "::notice title=Chef AI works::$(jq -c '.substitutions[0]' c.json | cut -c1-200)"
+          else
+            echo "::error title=Chef AI failed (HTTP $code)::$(head -c 300 c.json)"
+          fi
+          # clean up the test user
+          curl -s -o /dev/null -X POST "$URL/functions/v1/delete-account" -H "Authorization: Bearer $TOKEN" -H "apikey: $ANON" || true
