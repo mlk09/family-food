@@ -30,10 +30,11 @@ const API_BASE = IS_GEMINI ? "https://generativelanguage.googleapis.com/v1beta/o
 const MODEL = IS_GEMINI ? (Deno.env.get("GEMINI_MODEL") || "gemini-flash-lite-latest") : (Deno.env.get("OPENAI_MODEL") || "gpt-4o-mini");
 const FALLBACK_MODEL = IS_GEMINI ? (Deno.env.get("GEMINI_FALLBACK_MODEL") || "gemini-flash-latest") : "";
 // Free-tier models are often briefly overloaded (503); try several, fastest first.
-const MODEL_CHAIN = IS_GEMINI
-  ? [...new Set([MODEL, FALLBACK_MODEL, "gemini-2.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash-lite"])]
-  : [MODEL];
-const ATTEMPT_MS = 15_000; // max time per model before moving on
+const MODEL_CHAIN = IS_GEMINI ? [...new Set([MODEL, "gemini-3.1-flash-lite", FALLBACK_MODEL])] : [MODEL];
+// The main model gets most of the budget; fallbacks only get a short try.
+const attemptMs = (i: number) => (i === 0 ? 32_000 : 8_000);
+// Gemini 3 "thinks" before answering; low effort keeps replies fast. Set GEMINI_REASONING=off to disable.
+const GEMINI_REASONING = Deno.env.get("GEMINI_REASONING") || "low";
 const VISION_MODEL = IS_GEMINI ? MODEL : (Deno.env.get("OPENAI_VISION_MODEL") || MODEL);
 const DAILY_LIMIT = Number(Deno.env.get("DAILY_AI_LIMIT") ?? "80");
 const ALLOW_DEMO_AI = Deno.env.get("ALLOW_DEMO_AI") === "true";
@@ -65,7 +66,10 @@ async function openai(body: Record<string, unknown>, signal: AbortSignal): Promi
   const model = String(body.model);
   if (!IS_GEMINI && !supportsTemperature(model)) delete body.temperature;
   // Gemini 2.5 "thinks" before answering; a token cap can leave the answer empty.
-  if (IS_GEMINI) delete body.max_completion_tokens;
+  if (IS_GEMINI) {
+    delete body.max_completion_tokens;
+    if (GEMINI_REASONING !== "off") body.reasoning_effort = GEMINI_REASONING;
+  }
   const send = (b: Record<string, unknown>, s: AbortSignal) =>
     fetch(`${API_BASE}/chat/completions`, {
       method: "POST",
@@ -74,19 +78,24 @@ async function openai(body: Record<string, unknown>, signal: AbortSignal): Promi
       signal: s,
     });
   // Vision may pin a specific model; otherwise walk the chain.
-  const base = model === MODEL ? MODEL_CHAIN : [model];
-  // Two passes: overload spikes on the free tier usually clear within seconds.
-  const chain = [...base, ...base];
+  const chain = model === MODEL ? MODEL_CHAIN : [model];
   let last: Response | null = null;
   for (let i = 0; i < chain.length; i++) {
-    if (i === base.length) await new Promise((r) => setTimeout(r, 2000));
     if (signal.aborted) break;
     const attempt = new AbortController();
     const onAbort = () => attempt.abort();
     signal.addEventListener("abort", onAbort, { once: true });
-    const timer = setTimeout(() => attempt.abort(), ATTEMPT_MS);
+    const timer = setTimeout(() => attempt.abort(), attemptMs(i));
     try {
-      const res = await send({ ...body, model: chain[i] }, attempt.signal);
+      let res = await send({ ...body, model: chain[i] }, attempt.signal);
+      // Some models don't accept reasoning_effort — retry the same model without it.
+      if (res.status === 400 && "reasoning_effort" in body) {
+        const text = await res.clone().text();
+        if (/reasoning|thinking/i.test(text)) {
+          const { reasoning_effort: _r, ...rest } = body;
+          res = await send({ ...rest, model: chain[i] }, attempt.signal);
+        }
+      }
       // Busy (503), retired (404), per-model quota (429): move on to the next model.
       if (![404, 429, 500, 503].includes(res.status) || i === chain.length - 1) return res;
       console.warn(`model ${chain[i]} returned ${res.status}; trying ${chain[i + 1]}`);
@@ -215,7 +224,11 @@ Deno.serve(async (req) => {
           const r = await fetch(`${API_BASE}/chat/completions`, {
             method: "POST",
             headers: { "Authorization": `Bearer ${API_KEY}`, "Content-Type": "application/json" },
-            body: JSON.stringify({ model: m, messages: [{ role: "user", content: "Say OK" }] }),
+            body: JSON.stringify({
+              model: m,
+              messages: [{ role: "user", content: "Say OK" }],
+              ...(GEMINI_REASONING !== "off" ? { reasoning_effort: GEMINI_REASONING } : {}),
+            }),
             signal: AbortSignal.timeout(12_000),
           });
           results.push({ model: m, status: r.status, ms: Date.now() - t0, body: (await r.text()).slice(0, 160) });

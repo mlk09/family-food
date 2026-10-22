@@ -84,11 +84,11 @@ jobs:
             echo "::error title=Sign-up test failed::$(jq -r '.msg // .error_description // .message // "no session — is Confirm email still ON?"' s.json | cut -c1-200)"
             exit 0
           fi
-          code=$(curl -s -o c.json -w '%{http_code}' -X POST "$URL/functions/v1/chef-ai" \
+          code=$(curl -s -o c.json -w '%{http_code}' --max-time 60 -X POST "$URL/functions/v1/chef-ai" \
             -H "Authorization: Bearer $TOKEN" -H "apikey: $ANON" -H "Content-Type: application/json" \
             -d '{"action":"substitutions","ingredient":"onion","context":{"ingredients":[{"name":"tomato"}]}}')
           if [ "$code" = "200" ]; then
-            echo "::notice title=Chef AI works::$(jq -c '.substitutions[0]' c.json | cut -c1-200)"
+            echo "::notice title=Chef AI works (${SECONDS}s)::$(jq -c '.substitutions[0]' c.json | cut -c1-200)"
           else
             echo "::error title=Chef AI failed (HTTP $code)::$(head -c 300 c.json)"
           fi
