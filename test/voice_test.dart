@@ -16,4 +16,13 @@ void main() {
     expect(s, contains('Spring onion, same crunch'));
     expect(s, contains('rupees'));
   });
+
+  test('removes words and phrases repeated by the speech engine', () {
+    expect(VoiceService.dedupe('pyaz pyaz nahi nahi hai hai'), 'pyaz nahi hai');
+    expect(VoiceService.dedupe('pyaz nahi hai pyaz nahi hai'), 'pyaz nahi hai');
+    expect(VoiceService.dedupe('mere paas mere paas jo hai usse kya banau'), 'mere paas jo hai usse kya banau');
+    expect(VoiceService.dedupe('प्याज़ नहीं है प्याज़ नहीं है'), 'प्याज़ नहीं है');
+    expect(VoiceService.dedupe('aloo aur tamatar se kya banau'), 'aloo aur tamatar se kya banau');
+    expect(VoiceService.dedupe('Aloo, aloo'), 'Aloo,');
+  });
 }

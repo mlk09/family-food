@@ -22,6 +22,31 @@ class VoiceService {
   /// Devanagari text → Hindi voice; everything else (incl. Hinglish) → Indian English voice.
   static String languageFor(String text) => RegExp(r'[ऀ-ॿ]').hasMatch(text) ? 'hi-IN' : 'en-IN';
 
+  /// Cleans speech results: some engines (notably Chrome on Android) repeat
+  /// words or the whole phrase — "pyaz pyaz nahi nahi hai" → "pyaz nahi hai".
+  static String dedupe(String text) {
+    var words = text.trim().split(RegExp(r'\s+')).where((w) => w.isNotEmpty).toList();
+    if (words.isEmpty) return '';
+    String norm(String w) => w.toLowerCase().replaceAll(RegExp(r'[^\p{L}\p{N}]', unicode: true), '');
+    // Whole phrase said twice: "A B C A B C" or growing repeats "A A B A B C".
+    for (var n = words.length ~/ 2; n >= 2; n--) {
+      for (var start = 0; start + 2 * n <= words.length; start++) {
+        final a = words.sublist(start, start + n).map(norm).join(' ');
+        final b = words.sublist(start + n, start + 2 * n).map(norm).join(' ');
+        if (a == b) {
+          words = [...words.sublist(0, start + n), ...words.sublist(start + 2 * n)];
+          return dedupe(words.join(' '));
+        }
+      }
+    }
+    // Same word twice in a row.
+    final out = <String>[];
+    for (final w in words) {
+      if (out.isEmpty || norm(out.last) != norm(w)) out.add(w);
+    }
+    return out.join(' ');
+  }
+
   /// Removes markdown, bullets and emoji so the voice doesn't read symbols.
   static String speakable(String text) => text
       .replaceAll(RegExp(r'\*\*|__|`|#+\s|_\(|\)_'), '')
@@ -102,16 +127,19 @@ class VoiceService {
 
     await _stt.listen(
       onResult: (r) {
-        onText(r.recognizedWords);
-        if (r.finalResult) finish(r.recognizedWords);
+        final text = dedupe(r.recognizedWords);
+        onText(text);
+        if (r.finalResult) finish(text);
       },
       listenOptions: SpeechListenOptions(
         localeId: localeId,
         listenFor: const Duration(seconds: 30),
         pauseFor: const Duration(seconds: 3),
-        partialResults: true,
+        // Chrome's continuous/interim mode duplicates words on Android, so the
+        // web build listens for one sentence and uses only the final text.
+        partialResults: !kIsWeb,
         cancelOnError: true,
-        listenMode: ListenMode.dictation,
+        listenMode: kIsWeb ? ListenMode.confirmation : ListenMode.dictation,
       ),
     );
     listening.value = true;
