@@ -1,0 +1,102 @@
+# Every push to main: analyze, test, build the APK (downloadable artifact) and
+# deploy the download page + web app to GitHub Pages.
+# A version tag (v1.0.0) additionally attaches the APK to a GitHub Release,
+# giving a stable download URL that the download page links to.
+#
+# Repo → Settings → Secrets and variables → Actions → add:
+#   SUPABASE_URL, SUPABASE_ANON_KEY            (public values; still kept out of git)
+#   ANDROID_KEYSTORE_BASE64, ANDROID_KEY_ALIAS,
+#   ANDROID_KEY_PASSWORD, ANDROID_STORE_PASSWORD  (optional: release signing)
+# Repo → Settings → Pages → Source: "GitHub Actions".
+name: build
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pages: write
+  id-token: write
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - run: flutter pub get
+      - run: flutter analyze
+      - run: flutter test
+
+  android:
+    needs: test
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - name: Write .env from secrets
+        run: |
+          printf 'SUPABASE_URL=%s\nSUPABASE_ANON_KEY=%s\nAI_FUNCTION_NAME=chef-ai\nAUTH_REDIRECT_URL=familyfood://login-callback\n' \
+            "${{ secrets.SUPABASE_URL }}" "${{ secrets.SUPABASE_ANON_KEY }}" > .env
+      - name: Release signing (optional)
+        if: env.HAS_KEYSTORE == 'true'
+        env: { KS: "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" }
+        run: |
+          echo "$KS" | base64 -d > android/app/upload-keystore.jks
+          printf 'storeFile=upload-keystore.jks\nkeyAlias=%s\nkeyPassword=%s\nstorePassword=%s\n' \
+            "${{ secrets.ANDROID_KEY_ALIAS }}" "${{ secrets.ANDROID_KEY_PASSWORD }}" "${{ secrets.ANDROID_STORE_PASSWORD }}" > android/key.properties
+      - run: flutter build apk --release --dart-define-from-file=.env
+      - run: mv build/app/outputs/flutter-apk/app-release.apk family-food-assistant.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: family-food-assistant-apk, path: family-food-assistant.apk }
+      - name: Attach APK to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with: { files: family-food-assistant.apk }
+
+  web:
+    needs: test
+    # Pages' default protection only allows the default branch to deploy.
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: { name: github-pages, url: "${{ steps.deploy.outputs.page_url }}" }
+    steps:
+      - uses: actions/checkout@v4
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - name: Write .env from secrets
+        run: |
+          printf 'SUPABASE_URL=%s\nSUPABASE_ANON_KEY=%s\nAI_FUNCTION_NAME=chef-ai\n' \
+            "${{ secrets.SUPABASE_URL }}" "${{ secrets.SUPABASE_ANON_KEY }}" > .env
+      - name: Link the latest released APK (only if a release with the APK exists)
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: |
+          TAG=$(gh release view --repo "${{ github.repository }}" --json tagName,assets \
+                 --jq 'select(.assets[].name == "family-food-assistant.apk") | .tagName' 2>/dev/null | head -1 || true)
+          if [ -n "$TAG" ]; then
+            APK="https://github.com/${{ github.repository }}/releases/latest/download/family-food-assistant.apk"
+            sed -i "s|androidApkUrl: \"\"|androidApkUrl: \"$APK\"|; s|version: \"1.0.0\"|version: \"${TAG#v}\"|" web_download/config.js
+            echo "Linked APK from release $TAG"
+          else
+            echo "No release with an APK yet — Android button will say 'coming soon'."
+          fi
+      - name: Build web (base path = /<repo>/app/ on GitHub Pages)
+        run: |
+          flutter build web --release --no-web-resources-cdn --base-href "/${{ github.event.repository.name }}/app/" --dart-define-from-file=.env
+          mkdir -p deploy/app && cp -r build/web/. deploy/app/
+          cp web_download/index.html web_download/config.js web_download/icon.png deploy/ && touch deploy/.nojekyll
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: deploy }
+      - id: deploy
+        uses: actions/deploy-pages@v4

@@ -1,0 +1,10 @@
+# Supabase CLI project config (only the parts this app relies on).
+# `supabase init` will merge/extend this file; keep these function settings.
+
+[functions.chef-ai]
+# The function verifies the user's JWT itself (and supports Demo Mode keys),
+# so the gateway check is disabled. Do NOT disable auth inside the function.
+verify_jwt = false
+
+[functions.delete-account]
+verify_jwt = false

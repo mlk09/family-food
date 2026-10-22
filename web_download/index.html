@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Family Food Assistant Download</title>
+  <meta name="description" content="Download Family Food Assistant for Android, iPhone or use it in your browser.">
+  <meta name="theme-color" content="#0E0B13">
+  <link rel="icon" href="icon.png">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg: #0E0B13; --card: #1C1724; --border: #2C2537; --text: #F7F2EE; --muted: #9C93A8;
+      --saffron: #FF8A3D; --tomato: #FF4D6D; --berry: #8B5CF6; --herb: #34D399;
+    }
+    @media (prefers-color-scheme: light) {
+      :root { --bg: #FFF8F1; --card: #FFFFFF; --border: #F0E3D6; --text: #2A1E17; --muted: #8A7568; }
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; font-family: Outfit, system-ui, sans-serif; color: var(--text);
+      background: radial-gradient(circle at 50% -10%, rgba(255,138,61,.28), transparent 55%), var(--bg);
+      display: flex; justify-content: center; padding: 28px 16px 40px;
+    }
+    main { width: 100%; max-width: 440px; text-align: center; }
+    .logo { width: 104px; height: 104px; border-radius: 30px; box-shadow: 0 18px 44px rgba(255,77,109,.45); }
+    h1 { font-size: 30px; font-weight: 800; letter-spacing: .5px; margin: 22px 0 6px; }
+    h1 span { color: var(--saffron); }
+    .tag { color: var(--muted); font-size: 17px; margin: 0 0 28px; }
+    .btn {
+      display: flex; align-items: center; gap: 14px; width: 100%; min-height: 72px; padding: 14px 18px; margin-bottom: 14px;
+      border-radius: 22px; border: 1px solid var(--border); background: var(--card); color: var(--text);
+      text-decoration: none; text-align: left; font: inherit; transition: transform .15s, box-shadow .15s;
+    }
+    .btn:active { transform: scale(.98); }
+    .btn .ico { font-size: 30px; width: 44px; text-align: center; flex: none; }
+    .btn b { display: block; font-size: 18px; }
+    .btn small { display: block; color: var(--muted); font-size: 14px; margin-top: 2px; }
+    .btn.primary { background: linear-gradient(135deg, var(--saffron), var(--tomato) 60%, var(--berry)); border: none; color: #fff;
+      box-shadow: 0 14px 34px rgba(255,77,109,.38); }
+    .btn.primary small { color: rgba(255,255,255,.85); }
+    .btn.disabled { opacity: .55; pointer-events: none; }
+    .badge { display: inline-block; font-size: 11px; font-weight: 800; letter-spacing: .6px; padding: 3px 8px; border-radius: 8px;
+      background: rgba(255,255,255,.22); margin-left: 6px; vertical-align: 2px; }
+    .help { margin-top: 18px; background: var(--card); border: 1px solid var(--border); border-radius: 20px; padding: 16px 18px;
+      text-align: left; color: var(--muted); font-size: 14.5px; line-height: 1.5; }
+    .help h2 { font-size: 16px; color: var(--text); margin: 0 0 6px; }
+    .help ol { margin: 0; padding-left: 20px; }
+    .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; margin: 8px 0 22px; }
+    .features div { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 12px 6px; font-size: 13px; color: var(--muted); }
+    .features div span { display: block; font-size: 24px; margin-bottom: 4px; }
+    footer { margin-top: 26px; color: var(--muted); font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main>
+    <img class="logo" src="icon.png" alt="Family Food Assistant logo">
+    <h1>FAMILY <span>FOOD</span> ASSISTANT</h1>
+    <p class="tag">🍳 Your family's smart kitchen assistant</p>
+
+    <div class="features">
+      <div><span>🥔</span>What can I cook?</div>
+      <div><span>🤖</span>Chef AI</div>
+      <div><span>🛒</span>Smart lists</div>
+    </div>
+
+    <a id="android" class="btn" href="#">
+      <span class="ico">🤖</span>
+      <span><b>Download for Android</b><small id="android-sub"></small></span>
+    </a>
+    <a id="ios" class="btn" href="#">
+      <span class="ico">🍎</span>
+      <span><b>Download for iPhone</b><small id="ios-sub"></small></span>
+    </a>
+    <a id="web" class="btn" href="#">
+      <span class="ico">🌐</span>
+      <span><b>Open Web App</b><small id="web-sub">Works on any phone or computer</small></span>
+    </a>
+
+    <div class="help" id="help"></div>
+    <footer id="footer"></footer>
+  </main>
+
+  <script src="config.js"></script>
+  <script>
+    (function () {
+      var c = window.FFA_CONFIG || {};
+      var ua = navigator.userAgent || "";
+      var isAndroid = /Android/i.test(ua);
+      var isIOS = /iPhone|iPad|iPod/i.test(ua) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+      var $ = function (id) { return document.getElementById(id); };
+
+      function setup(id, url, sub, missingSub) {
+        var el = $(id);
+        if (url) { el.href = url; $(id + "-sub").textContent = sub; }
+        else { el.classList.add("disabled"); el.removeAttribute("href"); $(id + "-sub").textContent = missingSub; }
+        return !!url;
+      }
+
+      var androidUrl = c.playStoreUrl || c.androidApkUrl;
+      var hasAndroid = setup("android", androidUrl, c.playStoreUrl ? "Get it on Google Play" : "Install the APK (v" + (c.version || "1.0") + ")", "Android version coming soon");
+      var hasIOS = setup("ios", c.iosUrl, /testflight/i.test(c.iosUrl || "") ? "Install with TestFlight" : "Get it on the App Store", "iPhone version coming soon — use the Web App for now");
+      var hasWeb = setup("web", c.webAppUrl, "Works on any phone or computer", "Web app coming soon");
+
+      // Highlight the best option for this device.
+      var primary = isAndroid ? (hasAndroid ? "android" : "web") : isIOS ? (hasIOS ? "ios" : "web") : (hasWeb ? "web" : null);
+      if (primary && !$(primary).classList.contains("disabled")) {
+        $(primary).classList.add("primary");
+        $(primary).querySelector("b").insertAdjacentHTML("beforeend", '<span class="badge">FOR YOUR DEVICE</span>');
+        $(primary).parentNode.insertBefore($(primary), $("android"));
+      }
+
+      var help = $("help");
+      if (isAndroid && hasAndroid && !c.playStoreUrl) {
+        help.innerHTML = "<h2>Installing on Android</h2><ol><li>Tap <b>Download for Android</b>.</li><li>Open the downloaded file.</li><li>If asked, allow your browser to <b>install unknown apps</b>, then tap Install.</li></ol>";
+      } else if (isAndroid && !hasAndroid && hasWeb) {
+        help.innerHTML = "<h2>Use it on Android today</h2><ol><li>Tap <b>Open Web App</b> in Chrome.</li><li>Tap the <b>⋮</b> menu.</li><li>Choose <b>Install app</b> (or <b>Add to Home screen</b>).</li></ol>";
+      } else if (isIOS && !hasIOS && hasWeb) {
+        help.innerHTML = "<h2>Use it on iPhone today</h2><ol><li>Tap <b>Open Web App</b> in Safari.</li><li>Tap the <b>Share</b> button.</li><li>Choose <b>Add to Home Screen</b> — it opens like a normal app.</li></ol>";
+      } else if (isIOS && hasIOS && /testflight/i.test(c.iosUrl)) {
+        help.innerHTML = "<h2>Installing on iPhone</h2><ol><li>Install Apple's free <b>TestFlight</b> app.</li><li>Tap <b>Download for iPhone</b> and accept the invite.</li></ol>";
+      } else {
+        help.innerHTML = "<h2>On a computer?</h2>Scan this page's QR code with your phone, or open the Web App right here.";
+      }
+      $("footer").textContent = "Version " + (c.version || "1.0.0") + " · AI suggestions can make mistakes — always check allergens.";
+    })();
+  </script>
+</body>
+</html>
