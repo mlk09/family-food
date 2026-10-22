@@ -29,7 +29,11 @@ const API_KEY = IS_GEMINI ? GEMINI_API_KEY : OPENAI_API_KEY;
 const API_BASE = IS_GEMINI ? "https://generativelanguage.googleapis.com/v1beta/openai" : "https://api.openai.com/v1";
 const MODEL = IS_GEMINI ? (Deno.env.get("GEMINI_MODEL") || "gemini-flash-lite-latest") : (Deno.env.get("OPENAI_MODEL") || "gpt-4o-mini");
 const FALLBACK_MODEL = IS_GEMINI ? (Deno.env.get("GEMINI_FALLBACK_MODEL") || "gemini-flash-latest") : "";
-const FIRST_TRY_MS = 20_000; // give the main model this long before trying the fallback
+// Free-tier models are often briefly overloaded (503); try several, fastest first.
+const MODEL_CHAIN = IS_GEMINI
+  ? [...new Set([MODEL, FALLBACK_MODEL, "gemini-2.5-flash-lite", "gemini-3.1-flash-lite", "gemini-3.5-flash-lite"])]
+  : [MODEL];
+const ATTEMPT_MS = 15_000; // max time per model before moving on
 const VISION_MODEL = IS_GEMINI ? MODEL : (Deno.env.get("OPENAI_VISION_MODEL") || MODEL);
 const DAILY_LIMIT = Number(Deno.env.get("DAILY_AI_LIMIT") ?? "80");
 const ALLOW_DEMO_AI = Deno.env.get("ALLOW_DEMO_AI") === "true";
@@ -69,27 +73,32 @@ async function openai(body: Record<string, unknown>, signal: AbortSignal): Promi
       body: JSON.stringify(b),
       signal: s,
     });
-  if (!FALLBACK_MODEL || model === FALLBACK_MODEL) return await send(body, signal);
-
-  // First try: limited time so a slow/overloaded model doesn't eat the whole budget.
-  const first = new AbortController();
-  const onAbort = () => first.abort();
-  signal.addEventListener("abort", onAbort, { once: true });
-  const timer = setTimeout(() => first.abort(), FIRST_TRY_MS);
-  try {
-    const res = await send(body, first.signal);
-    // Busy (503), retired (404), per-model quota (429): try the fallback model once.
-    if (![404, 429, 500, 503].includes(res.status)) return res;
-    console.warn(`model ${model} returned ${res.status}; retrying with ${FALLBACK_MODEL}`);
-    await res.body?.cancel();
-  } catch (e) {
-    if (signal.aborted) throw e;
-    console.warn(`model ${model} too slow; retrying with ${FALLBACK_MODEL}`);
-  } finally {
-    clearTimeout(timer);
-    signal.removeEventListener("abort", onAbort);
+  // Vision may pin a specific model; otherwise walk the chain.
+  const chain = model === MODEL ? MODEL_CHAIN : [model];
+  let last: Response | null = null;
+  for (let i = 0; i < chain.length; i++) {
+    if (signal.aborted) break;
+    const attempt = new AbortController();
+    const onAbort = () => attempt.abort();
+    signal.addEventListener("abort", onAbort, { once: true });
+    const timer = setTimeout(() => attempt.abort(), ATTEMPT_MS);
+    try {
+      const res = await send({ ...body, model: chain[i] }, attempt.signal);
+      // Busy (503), retired (404), per-model quota (429): move on to the next model.
+      if (![404, 429, 500, 503].includes(res.status) || i === chain.length - 1) return res;
+      console.warn(`model ${chain[i]} returned ${res.status}; trying ${chain[i + 1]}`);
+      if (last) await last.body?.cancel();
+      last = res;
+    } catch (e) {
+      if (signal.aborted) throw e;
+      console.warn(`model ${chain[i]} too slow; trying next`);
+    } finally {
+      clearTimeout(timer);
+      signal.removeEventListener("abort", onAbort);
+    }
   }
-  return await send({ ...body, model: FALLBACK_MODEL }, signal);
+  if (last) return last;
+  throw new DOMException("all models timed out", "AbortError");
 }
 
 type Msg = { role: string; content: unknown };

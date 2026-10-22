@@ -37,6 +37,17 @@ jobs:
             echo "::warning title=$m HTTP $code::$(jq -c . g.json 2>/dev/null | head -c 200)"
           done
 
+      - name: 1c · Gemini structured JSON (schema) support
+        if: env.GEMINI_API_KEY != ''
+        run: |
+          for m in gemini-flash-lite-latest gemini-flash-latest; do
+            code=$(curl -s -o j.json -w '%{http_code}' https://generativelanguage.googleapis.com/v1beta/openai/chat/completions \
+              -H "Authorization: Bearer $GEMINI_API_KEY" -H "Content-Type: application/json" \
+              -d "{\"model\":\"$m\",\"messages\":[{\"role\":\"user\",\"content\":\"Give one substitute for onion\"}],\"response_format\":{\"type\":\"json_schema\",\"json_schema\":{\"name\":\"s\",\"strict\":true,\"schema\":{\"type\":\"object\",\"additionalProperties\":false,\"required\":[\"substitute\"],\"properties\":{\"substitute\":{\"type\":\"string\"}}}}}}")
+            if [ "$code" = "200" ]; then echo "::notice title=JSON schema OK ($m)::$(jq -r '.choices[0].message.content' j.json | head -c 120)"
+            else echo "::warning title=JSON schema $m HTTP $code::$(jq -c . j.json 2>/dev/null | head -c 200)"; fi
+          done
+
       - name: 1b · OpenAI key and billing
         if: env.OPENAI_API_KEY != ''
         run: |
