@@ -17,17 +17,24 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
-      - name: 1a · Gemini key (free tier)
+      - name: 1a · Gemini key (free tier) and available models
         if: env.GEMINI_API_KEY != ''
         run: |
-          code=$(curl -s -o g.json -w '%{http_code}' https://generativelanguage.googleapis.com/v1beta/openai/chat/completions \
-            -H "Authorization: Bearer $GEMINI_API_KEY" -H "Content-Type: application/json" \
-            -d '{"model":"gemini-2.5-flash","messages":[{"role":"user","content":"Say OK"}]}')
-          if [ "$code" = "200" ]; then
-            echo "::notice title=Gemini OK::Key works ($(jq -r '.choices[0].message.content' g.json | head -c 40))."
-          else
-            echo "::error title=Gemini failed (HTTP $code)::$(head -c 300 g.json)"
+          code=$(curl -s -o m.json -w '%{http_code}' "https://generativelanguage.googleapis.com/v1beta/models?pageSize=200" -H "x-goog-api-key: $GEMINI_API_KEY")
+          if [ "$code" != "200" ]; then
+            echo "::error title=Gemini key failed (HTTP $code)::$(jq -c . m.json 2>/dev/null | head -c 300)"
+            exit 0
           fi
+          models=$(jq -r '.models[] | select(.supportedGenerationMethods | index("generateContent")) | .name | sub("^models/";"")' m.json | grep -i flash | grep -viE 'image|tts|live|audio|thinking|exp' | tr '\n' ' ')
+          echo "::notice title=Gemini flash models::$models"
+          for m in $models; do
+            code=$(curl -s -o g.json -w '%{http_code}' https://generativelanguage.googleapis.com/v1beta/openai/chat/completions \
+              -H "Authorization: Bearer $GEMINI_API_KEY" -H "Content-Type: application/json" \
+              -d "{\"model\":\"$m\",\"messages\":[{\"role\":\"user\",\"content\":\"Say OK\"}]}")
+            echo "$m -> HTTP $code"
+            if [ "$code" = "200" ]; then echo "::notice title=Gemini works with $m::$(jq -r '.choices[0].message.content' g.json | head -c 40)"; break; fi
+            echo "::warning title=$m HTTP $code::$(jq -c . g.json 2>/dev/null | head -c 200)"
+          done
 
       - name: 1b · OpenAI key and billing
         if: env.OPENAI_API_KEY != ''
