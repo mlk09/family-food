@@ -25,7 +25,8 @@ jobs:
             echo "::error title=Gemini key failed (HTTP $code)::$(jq -c . m.json 2>/dev/null | head -c 300)"
             exit 0
           fi
-          models=$(jq -r '.models[] | select(.supportedGenerationMethods | index("generateContent")) | .name | sub("^models/";"")' m.json | grep -i flash | grep -viE 'image|tts|live|audio|thinking|exp' | tr '\n' ' ')
+          # The app uses the auto-updating aliases first.
+          models="gemini-flash-latest gemini-flash-lite-latest "$(jq -r '.models[] | select(.supportedGenerationMethods | index("generateContent")) | .name | sub("^models/";"")' m.json | grep -i flash | grep -viE 'image|tts|live|audio|thinking|exp' | tr '\n' ' ')
           echo "::notice title=Gemini flash models::$models"
           for m in $models; do
             code=$(curl -s -o g.json -w '%{http_code}' https://generativelanguage.googleapis.com/v1beta/openai/chat/completions \

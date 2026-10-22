@@ -8,7 +8,8 @@
 //   GEMINI_API_KEY        Google AI Studio key (free tier)      ┐ one of these
 //   OPENAI_API_KEY        OpenAI key (paid credit)               ┘ is required
 //   AI_PROVIDER           optional, "gemini" | "openai" (default: gemini if its key is set)
-//   GEMINI_MODEL          optional, default "gemini-2.5-flash"
+//   GEMINI_MODEL          optional, default "gemini-flash-latest" (auto-updating alias)
+//   GEMINI_FALLBACK_MODEL optional, default "gemini-flash-lite-latest" (used when the main model is busy/missing)
 //   OPENAI_MODEL          optional, default "gpt-4o-mini"
 //   OPENAI_VISION_MODEL   optional, defaults to OPENAI_MODEL
 //   DAILY_AI_LIMIT        optional, requests per user per day (default 80)
@@ -26,7 +27,8 @@ const PROVIDER = (Deno.env.get("AI_PROVIDER") || (GEMINI_API_KEY ? "gemini" : "o
 const IS_GEMINI = PROVIDER === "gemini";
 const API_KEY = IS_GEMINI ? GEMINI_API_KEY : OPENAI_API_KEY;
 const API_BASE = IS_GEMINI ? "https://generativelanguage.googleapis.com/v1beta/openai" : "https://api.openai.com/v1";
-const MODEL = IS_GEMINI ? (Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash") : (Deno.env.get("OPENAI_MODEL") || "gpt-4o-mini");
+const MODEL = IS_GEMINI ? (Deno.env.get("GEMINI_MODEL") || "gemini-flash-latest") : (Deno.env.get("OPENAI_MODEL") || "gpt-4o-mini");
+const FALLBACK_MODEL = IS_GEMINI ? (Deno.env.get("GEMINI_FALLBACK_MODEL") || "gemini-flash-lite-latest") : "";
 const VISION_MODEL = IS_GEMINI ? MODEL : (Deno.env.get("OPENAI_VISION_MODEL") || MODEL);
 const DAILY_LIMIT = Number(Deno.env.get("DAILY_AI_LIMIT") ?? "80");
 const ALLOW_DEMO_AI = Deno.env.get("ALLOW_DEMO_AI") === "true";
@@ -59,12 +61,21 @@ async function openai(body: Record<string, unknown>, signal: AbortSignal): Promi
   if (!IS_GEMINI && !supportsTemperature(model)) delete body.temperature;
   // Gemini 2.5 "thinks" before answering; a token cap can leave the answer empty.
   if (IS_GEMINI) delete body.max_completion_tokens;
-  return await fetch(`${API_BASE}/chat/completions`, {
-    method: "POST",
-    headers: { "Authorization": `Bearer ${API_KEY}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    signal,
-  });
+  const send = (b: Record<string, unknown>) =>
+    fetch(`${API_BASE}/chat/completions`, {
+      method: "POST",
+      headers: { "Authorization": `Bearer ${API_KEY}`, "Content-Type": "application/json" },
+      body: JSON.stringify(b),
+      signal,
+    });
+  const res = await send(body);
+  // Busy (503), retired (404) or per-model quota (429): try the lighter fallback model once.
+  if (FALLBACK_MODEL && model !== FALLBACK_MODEL && [404, 429, 500, 503].includes(res.status)) {
+    console.warn(`model ${model} returned ${res.status}; retrying with ${FALLBACK_MODEL}`);
+    await res.body?.cancel();
+    return await send({ ...body, model: FALLBACK_MODEL });
+  }
+  return res;
 }
 
 type Msg = { role: string; content: unknown };
