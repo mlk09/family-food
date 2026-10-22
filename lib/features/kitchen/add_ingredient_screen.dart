@@ -1,4 +1,3 @@
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -125,21 +124,38 @@ class _AddIngredientScreenState extends ConsumerState<AddIngredientScreen> {
       showSnack(context, '📷 Photo scanning needs the cloud AI backend. Add your Supabase keys to enable it (see README).');
       return;
     }
-    final source = kIsWeb
-        ? ImageSource.gallery
-        : await showModalBottomSheet<ImageSource>(
-            context: context,
-            builder: (c) => SafeArea(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                ListTile(leading: const Icon(Icons.photo_camera_rounded), title: const Text('Take a photo'), onTap: () => Navigator.pop(c, ImageSource.camera)),
-                ListTile(leading: const Icon(Icons.photo_library_rounded), title: const Text('Choose from gallery'), onTap: () => Navigator.pop(c, ImageSource.gallery)),
-                const SizedBox(height: 12),
-              ]),
+    // Always ask: on phones (app or browser) "camera" opens the rear camera directly.
+    final source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      builder: (c) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.stretch, children: [
+            Text('Photo kaise doge?', style: c.text.titleLarge),
+            const SizedBox(height: 12),
+            GradientButton(
+              label: '📷  Camera se photo lo',
+              onPressed: () => Navigator.pop(c, ImageSource.camera),
             ),
-          );
+            const SizedBox(height: 10),
+            OutlinedButton.icon(
+              onPressed: () => Navigator.pop(c, ImageSource.gallery),
+              icon: const Icon(Icons.photo_library_rounded),
+              label: const Text('Gallery se chuno'),
+            ),
+          ]),
+        ),
+      ),
+    );
     if (source == null) return;
     try {
-      final file = await ImagePicker().pickImage(source: source, maxWidth: 1024, maxHeight: 1024, imageQuality: 70);
+      final file = await ImagePicker().pickImage(
+        source: source,
+        preferredCameraDevice: CameraDevice.rear,
+        maxWidth: 1024,
+        maxHeight: 1024,
+        imageQuality: 70,
+      );
       if (file == null) return;
       setState(() => _scanning = true);
       final names = await ai.scanIngredients(await file.readAsBytes());
