@@ -51,12 +51,28 @@ jobs:
           version: latest
 
       - name: Store OpenAI key as a server-side secret (never in the app)
-        run: supabase secrets set --project-ref "$PROJECT_REF" OPENAI_API_KEY="$OPENAI_API_KEY" DAILY_AI_LIMIT=80
+        run: |
+          if ! out=$(supabase secrets set --project-ref "$PROJECT_REF" OPENAI_API_KEY="$OPENAI_API_KEY" DAILY_AI_LIMIT=80 2>&1); then
+            echo "$out"
+            msg=$(echo "$out" | tr '\n' ' ' | cut -c1-400)
+            echo "::error title=supabase secrets set failed::$msg"
+            if echo "$out" | grep -qiE '401|403|unauthori|forbidden|permission'; then
+              echo "::error title=Token permission::SUPABASE_ACCESS_TOKEN cannot manage this project. Create a token with Secrets + Edge Functions write access (or a legacy token) and update the secret."
+            fi
+            exit 1
+          fi
+          echo "$out"
 
       - name: Deploy Edge Functions
         run: |
-          supabase functions deploy chef-ai --project-ref "$PROJECT_REF" --no-verify-jwt
-          supabase functions deploy delete-account --project-ref "$PROJECT_REF" --no-verify-jwt
+          for fn in chef-ai delete-account; do
+            if ! out=$(supabase functions deploy "$fn" --project-ref "$PROJECT_REF" --no-verify-jwt 2>&1); then
+              echo "$out"
+              echo "::error title=deploy $fn failed::$(echo "$out" | tr '\n' ' ' | tail -c 400)"
+              exit 1
+            fi
+            echo "$out" | tail -3
+          done
 
       - name: Check Chef AI is reachable
         run: |
