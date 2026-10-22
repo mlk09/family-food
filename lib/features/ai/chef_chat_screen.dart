@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../core/constants/app_constants.dart';
+import '../../core/services/voice_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../data/session.dart';
 import '../../models/profile.dart';
 import '../../models/recipe.dart';
 import '../../widgets/common.dart';
@@ -22,6 +24,12 @@ class ChefChatScreen extends ConsumerStatefulWidget {
 class _ChefChatScreenState extends ConsumerState<ChefChatScreen> {
   final _input = TextEditingController();
   final _scroll = ScrollController();
+  final _voice = VoiceService.instance;
+
+  static const _autoSpeakKey = 'chef_auto_speak';
+  static const _voiceLangKey = 'chef_voice_lang';
+  bool get _autoSpeak => ref.read(sharedPrefsProvider).getBool(_autoSpeakKey) ?? true;
+  String get _voiceLang => ref.read(sharedPrefsProvider).getString(_voiceLangKey) ?? 'hi-IN';
 
   static const _general = [
     'Mere paas jo hai usse kya banau?',
@@ -49,6 +57,8 @@ class _ChefChatScreenState extends ConsumerState<ChefChatScreen> {
 
   @override
   void dispose() {
+    _voice.stopSpeaking();
+    _voice.stopListening();
     _input.dispose();
     _scroll.dispose();
     super.dispose();
@@ -59,6 +69,31 @@ class _ChefChatScreenState extends ConsumerState<ChefChatScreen> {
     if (t.isEmpty) return;
     _input.clear();
     ref.read(chatProvider.notifier).send(t);
+  }
+
+  Future<void> _listen() async {
+    if (_voice.listening.value) {
+      await _voice.stopListening();
+      return;
+    }
+    final ok = await _voice.listen(
+      localeId: _voiceLang,
+      onText: (t) => setState(() => _input.text = t),
+      onDone: (t) {
+        if (t.trim().isNotEmpty) _send(t);
+      },
+    );
+    if (!ok && mounted) {
+      showSnack(context, '🎤 Bolkar poochne ke liye mic ki permission do. (Web par Chrome browser use karo.)');
+    }
+  }
+
+  Future<void> _toggleAutoSpeak() async {
+    final next = !_autoSpeak;
+    await ref.read(sharedPrefsProvider).setBool(_autoSpeakKey, next);
+    if (!next) await _voice.stopSpeaking();
+    setState(() {});
+    if (mounted) showSnack(context, next ? '🔊 Chef ab jawab bolkar sunayega' : '🔇 Awaaz band');
   }
 
   void _scrollToEnd() {
@@ -75,6 +110,11 @@ class _ChefChatScreenState extends ConsumerState<ChefChatScreen> {
     final ctx = ref.watch(aiContextProvider);
     ref.listen(chatProvider, (p, n) {
       if (p?.messages.length != n.messages.length || (n.messages.isNotEmpty && n.messages.last.pending)) _scrollToEnd();
+      // A reply just finished → read it aloud.
+      final wasPending = p != null && p.messages.isNotEmpty && p.messages.last.pending;
+      if (wasPending && n.messages.isNotEmpty && !n.messages.last.pending && !n.messages.last.isUser && _autoSpeak) {
+        _voice.speak(n.messages.last.content);
+      }
     });
     final p = ctx.profile;
     final suggestions = chat.recipe != null ? _forRecipe : _general;
@@ -100,6 +140,24 @@ class _ChefChatScreenState extends ConsumerState<ChefChatScreen> {
           ),
         ]),
         actions: [
+          IconButton(
+            tooltip: _autoSpeak ? 'Awaaz band karo' : 'Jawab bolkar sunao',
+            icon: Icon(_autoSpeak ? Icons.volume_up_rounded : Icons.volume_off_rounded),
+            onPressed: _toggleAutoSpeak,
+          ),
+          PopupMenuButton<String>(
+            tooltip: 'Bolne ki bhasha',
+            icon: const Icon(Icons.translate_rounded),
+            initialValue: _voiceLang,
+            onSelected: (v) async {
+              await ref.read(sharedPrefsProvider).setString(_voiceLangKey, v);
+              setState(() {});
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(value: 'hi-IN', child: Text('🎤 Hindi mein bolunga')),
+              PopupMenuItem(value: 'en-IN', child: Text('🎤 English mein bolunga')),
+            ],
+          ),
           if (chat.messages.isNotEmpty)
             IconButton(
               tooltip: 'New chat',
@@ -198,6 +256,20 @@ class _ChefChatScreenState extends ConsumerState<ChefChatScreen> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
               child: Row(children: [
+                ValueListenableBuilder<bool>(
+                  valueListenable: _voice.listening,
+                  builder: (_, on, _) => SizedBox(
+                    width: 52,
+                    height: 52,
+                    child: IconButton.filledTonal(
+                      tooltip: on ? 'Sunna band karo' : 'Bolkar poocho',
+                      style: IconButton.styleFrom(backgroundColor: on ? AppColors.tomato : AppColors.berry.withValues(alpha: 0.22)),
+                      onPressed: chat.sending ? null : _listen,
+                      icon: Icon(on ? Icons.stop_rounded : Icons.mic_rounded, color: on ? Colors.white : null, size: 26),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
                 Expanded(
                   child: TextField(
                     controller: _input,
@@ -207,7 +279,10 @@ class _ChefChatScreenState extends ConsumerState<ChefChatScreen> {
                     textInputAction: TextInputAction.send,
                     onSubmitted: (_) => _send(),
                     style: const TextStyle(fontSize: 17),
-                    decoration: const InputDecoration(hintText: 'Chef se poocho… (Hindi / English)', counterText: ''),
+                    decoration: InputDecoration(
+                      hintText: _voice.listening.value ? '🎤 Sun raha hoon… boliye' : 'Likho ya 🎤 dabakar bolo',
+                      counterText: '',
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -282,7 +357,19 @@ class _Bubble extends StatelessWidget {
               ? const _TypingDots()
               : user
                   ? Text(m.content, style: const TextStyle(color: Colors.white, fontSize: 17, height: 1.4))
-                  : RichMessage(m.content),
+                  : Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      RichMessage(m.content),
+                      if (!m.pending)
+                        Align(
+                          alignment: Alignment.centerRight,
+                          child: TextButton.icon(
+                            style: TextButton.styleFrom(minimumSize: const Size(40, 36), padding: const EdgeInsets.symmetric(horizontal: 8)),
+                            onPressed: () => VoiceService.instance.speak(m.content),
+                            icon: const Icon(Icons.volume_up_rounded, size: 18),
+                            label: const Text('Suno'),
+                          ),
+                        ),
+                    ]),
         ),
       ),
     );

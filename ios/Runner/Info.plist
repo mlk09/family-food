@@ -4,6 +4,10 @@
 <dict>
 	<key>NSCameraUsageDescription</key>
 	<string>Take a photo of your groceries so Chef AI can add the ingredients to your kitchen.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Speak your question to Chef AI instead of typing.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Turns your spoken question into text for Chef AI.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>Choose a photo of your groceries, or a profile picture.</string>
 	<key>CFBundleURLTypes</key>

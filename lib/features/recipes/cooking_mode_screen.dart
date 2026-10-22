@@ -6,9 +6,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:wakelock_plus/wakelock_plus.dart';
 
+import '../../core/services/voice_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/utils/safety.dart';
 import '../../data/providers.dart';
+import '../../data/session.dart';
 import '../../models/recipe.dart';
 import '../../widgets/common.dart';
 
@@ -30,15 +32,35 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
 
   List<String> get _steps => widget.recipe.instructions;
 
+  static const _readAloudKey = 'cook_read_aloud';
+  bool get _readAloud => ref.read(sharedPrefsProvider).getBool(_readAloudKey) ?? false;
+
+  void _speakStep(int i) => VoiceService.instance.speak('Step ${i + 1}. ${_steps[i]}');
+
+  Future<void> _toggleReadAloud() async {
+    final next = !_readAloud;
+    await ref.read(sharedPrefsProvider).setBool(_readAloudKey, next);
+    setState(() {});
+    if (next) {
+      _speakStep(_step);
+    } else {
+      await VoiceService.instance.stopSpeaking();
+    }
+  }
+
   @override
   void initState() {
     super.initState();
     WakelockPlus.enable().catchError((_) {});
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_readAloud && _steps.isNotEmpty) _speakStep(0);
+    });
   }
 
   @override
   void dispose() {
     _timer?.cancel();
+    VoiceService.instance.stopSpeaking();
     _page.dispose();
     WakelockPlus.disable().catchError((_) {});
     super.dispose();
@@ -115,6 +137,12 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
         title: Text(widget.recipe.name, maxLines: 1, overflow: TextOverflow.ellipsis),
         actions: [
           IconButton(
+            tooltip: _readAloud ? 'Bolna band karo' : 'Har step bolkar sunao',
+            icon: Icon(_readAloud ? Icons.record_voice_over_rounded : Icons.voice_over_off_rounded, size: 28,
+                color: _readAloud ? AppColors.saffron : null),
+            onPressed: _toggleReadAloud,
+          ),
+          IconButton(
             tooltip: 'Ingredients',
             icon: const Icon(Icons.list_alt_rounded, size: 28),
             onPressed: () => showModalBottomSheet<void>(
@@ -161,7 +189,10 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
               child: PageView.builder(
                 controller: _page,
                 itemCount: _steps.length,
-                onPageChanged: (i) => setState(() => _step = i),
+                onPageChanged: (i) {
+                  setState(() => _step = i);
+                  if (_readAloud) _speakStep(i);
+                },
                 itemBuilder: (_, i) {
                   final step = _steps[i];
                   final tip = Safety.tipFor(step);
@@ -170,7 +201,16 @@ class _CookingModeScreenState extends ConsumerState<CookingModeScreen> {
                     padding: const EdgeInsets.fromLTRB(26, 30, 26, 20),
                     child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
                       Text(step, style: const TextStyle(fontSize: 30, height: 1.35, fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 28),
+                      const SizedBox(height: 16),
+                      Align(
+                        alignment: Alignment.centerLeft,
+                        child: OutlinedButton.icon(
+                          onPressed: () => _speakStep(i),
+                          icon: const Icon(Icons.volume_up_rounded, size: 26),
+                          label: const Text('Suno', style: TextStyle(fontSize: 18)),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
                       if (timer != null)
                         _TimerCard(
                           label: _timerStep == i && _remaining != null ? _fmt(_remaining!) : _fmt(timer),

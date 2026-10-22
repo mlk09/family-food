@@ -47,6 +47,8 @@ dependencies:
   uuid: ^4.6.0
   intl: ^0.20.3
   flutter_timezone: ^5.1.1
+  flutter_tts: ^4.2.5
+  speech_to_text: ^7.5.0
 
 dev_dependencies:
   flutter_test:
