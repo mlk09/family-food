@@ -1,10 +1,14 @@
-// Chef AI — secure server-side proxy between the Flutter app and OpenAI.
+// Chef AI — secure server-side proxy between the Flutter app and the AI provider
+// (OpenAI, or Google Gemini through its OpenAI-compatible endpoint — free tier).
 //
 // Flutter ─▶ this Edge Function (verifies the user, rate-limits, builds prompts,
-//            enforces JSON schemas) ─▶ OpenAI ─▶ validated JSON / streamed text ─▶ Flutter
+//            enforces JSON schemas) ─▶ AI provider ─▶ validated JSON / streamed text ─▶ Flutter
 //
 // Secrets (set with `supabase secrets set ...`, never in the app):
-//   OPENAI_API_KEY        required
+//   GEMINI_API_KEY        Google AI Studio key (free tier)      ┐ one of these
+//   OPENAI_API_KEY        OpenAI key (paid credit)               ┘ is required
+//   AI_PROVIDER           optional, "gemini" | "openai" (default: gemini if its key is set)
+//   GEMINI_MODEL          optional, default "gemini-2.5-flash"
 //   OPENAI_MODEL          optional, default "gpt-4o-mini"
 //   OPENAI_VISION_MODEL   optional, defaults to OPENAI_MODEL
 //   DAILY_AI_LIMIT        optional, requests per user per day (default 80)
@@ -17,8 +21,13 @@ import { corsHeaders, json } from "../_shared/cors.ts";
 import { schemas, systemPrompt, userPrompt, type Ctx } from "./prompts.ts";
 
 const OPENAI_API_KEY = Deno.env.get("OPENAI_API_KEY") ?? "";
-const MODEL = Deno.env.get("OPENAI_MODEL") ?? "gpt-4o-mini";
-const VISION_MODEL = Deno.env.get("OPENAI_VISION_MODEL") ?? MODEL;
+const GEMINI_API_KEY = Deno.env.get("GEMINI_API_KEY") ?? "";
+const PROVIDER = (Deno.env.get("AI_PROVIDER") || (GEMINI_API_KEY ? "gemini" : "openai")).toLowerCase();
+const IS_GEMINI = PROVIDER === "gemini";
+const API_KEY = IS_GEMINI ? GEMINI_API_KEY : OPENAI_API_KEY;
+const API_BASE = IS_GEMINI ? "https://generativelanguage.googleapis.com/v1beta/openai" : "https://api.openai.com/v1";
+const MODEL = IS_GEMINI ? (Deno.env.get("GEMINI_MODEL") || "gemini-2.5-flash") : (Deno.env.get("OPENAI_MODEL") || "gpt-4o-mini");
+const VISION_MODEL = IS_GEMINI ? MODEL : (Deno.env.get("OPENAI_VISION_MODEL") || MODEL);
 const DAILY_LIMIT = Number(Deno.env.get("DAILY_AI_LIMIT") ?? "80");
 const ALLOW_DEMO_AI = Deno.env.get("ALLOW_DEMO_AI") === "true";
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
@@ -47,13 +56,42 @@ const supportsTemperature = (model: string) => !/^(o\d|gpt-5)/i.test(model);
 
 async function openai(body: Record<string, unknown>, signal: AbortSignal): Promise<Response> {
   const model = String(body.model);
-  if (!supportsTemperature(model)) delete body.temperature;
-  return await fetch("https://api.openai.com/v1/chat/completions", {
+  if (!IS_GEMINI && !supportsTemperature(model)) delete body.temperature;
+  // Gemini 2.5 "thinks" before answering; a token cap can leave the answer empty.
+  if (IS_GEMINI) delete body.max_completion_tokens;
+  return await fetch(`${API_BASE}/chat/completions`, {
     method: "POST",
-    headers: { "Authorization": `Bearer ${OPENAI_API_KEY}`, "Content-Type": "application/json" },
+    headers: { "Authorization": `Bearer ${API_KEY}`, "Content-Type": "application/json" },
     body: JSON.stringify(body),
     signal,
   });
+}
+
+type Msg = { role: string; content: unknown };
+
+/** JSON call with a strict schema; if the provider rejects the schema (400),
+ *  retries in plain JSON mode with the schema described in the prompt. */
+async function structured(
+  model: string,
+  // deno-lint-ignore no-explicit-any
+  schema: { name: string; schema: any },
+  messages: Msg[],
+  temperature: number,
+  signal: AbortSignal,
+): Promise<Response> {
+  const res = await openai({ model, temperature, response_format: { type: "json_schema", json_schema: schema }, messages }, signal);
+  if (res.status !== 400) return res;
+  console.warn("schema rejected, retrying in json_object mode:", (await res.text()).slice(0, 300));
+  const hint = `Respond ONLY with a JSON object that matches this JSON Schema exactly:\n${JSON.stringify(schema.schema)}`;
+  const withHint = messages.map((m, i) => (i === 0 && m.role === "system" ? { ...m, content: `${m.content}\n\n${hint}` } : m));
+  if (withHint[0]?.role !== "system") withHint.unshift({ role: "system", content: hint });
+  return await openai({ model, temperature, response_format: { type: "json_object" }, messages: withHint }, signal);
+}
+
+/** Strips ```json fences some models add even in JSON mode. */
+function parseJson(content: string): unknown {
+  const t = content.trim().replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
+  return JSON.parse(t);
 }
 
 /** Logs an OpenAI failure and returns a safe error with OpenAI's error code (no secrets). */
@@ -62,8 +100,10 @@ async function upstreamError(req: Request, label: string, res: Response): Promis
   console.error("openai", label, res.status, text);
   let detail = `http_${res.status}`;
   try {
-    const e = JSON.parse(text)?.error;
-    detail = String(e?.code || e?.type || detail);
+    const parsed = JSON.parse(text);
+    const e = (Array.isArray(parsed) ? parsed[0] : parsed)?.error;
+    // OpenAI: code/type ("insufficient_quota"); Gemini: status ("RESOURCE_EXHAUSTED").
+    detail = String((typeof e?.code === "string" && e.code) || e?.status || e?.type || detail);
   } catch { /* not JSON */ }
   return json(req, { error: "ai_unavailable", detail }, 502);
 }
@@ -99,7 +139,7 @@ function sanitize(action: string, data: any): any {
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders(req) });
   if (req.method !== "POST") return json(req, { error: "method_not_allowed" }, 405);
-  if (!OPENAI_API_KEY) return json(req, { error: "ai_not_configured" }, 503);
+  if (!API_KEY) return json(req, { error: "ai_not_configured" }, 503);
 
   const len = Number(req.headers.get("content-length") ?? "0");
   if (len > MAX_BODY_BYTES) return json(req, { error: "too_large" }, 413);
@@ -191,36 +231,30 @@ Deno.serve(async (req) => {
     if (action === "scan_ingredients") {
       const b64 = String(body.image_base64 ?? "");
       if (!b64 || b64.length > MAX_BODY_BYTES) return json(req, { error: "bad_image" }, 400);
-      const res = await openai({
-        model: VISION_MODEL,
-        temperature: 0.2,
-        response_format: { type: "json_schema", json_schema: schemas.scan_ingredients },
-        messages: [
-          { role: "system", content: "You identify food ingredients in photos of kitchens, fridges and groceries. Return only clearly visible edible items with simple common names (e.g. \"tomato\", \"milk\"). Ignore people, brands and non-food items." },
-          { role: "user", content: [
-            { type: "text", text: "List the food ingredients you can see." },
-            { type: "image_url", image_url: { url: `data:image/jpeg;base64,${b64}`, detail: "low" } },
-          ] },
-        ],
-      }, controller.signal);
+      const res = await structured(VISION_MODEL, schemas.scan_ingredients, [
+        { role: "system", content: "You identify food ingredients in photos of kitchens, fridges and groceries. Return only clearly visible edible items with simple common names (e.g. \"tomato\", \"milk\"). Ignore people, brands and non-food items." },
+        { role: "user", content: [
+          { type: "text", text: "List the food ingredients you can see." },
+          { type: "image_url", image_url: { url: `data:image/jpeg;base64,${b64}`, detail: "low" } },
+        ] },
+      ], 0.2, controller.signal);
       if (!res.ok) {
         return await upstreamError(req, "vision", res);
       }
       const out = await res.json();
-      return json(req, JSON.parse(out.choices?.[0]?.message?.content ?? "{\"ingredients\":[]}"));
+      try {
+        return json(req, parseJson(out.choices?.[0]?.message?.content ?? "{\"ingredients\":[]}"));
+      } catch {
+        return json(req, { ingredients: [] });
+      }
     }
 
     // ── Structured JSON actions ──
     const schema = schemas[action as keyof typeof schemas];
-    const res = await openai({
-      model: MODEL,
-      temperature: action === "meal_plan" || action === "generate_recipes" ? 0.8 : 0.5,
-      response_format: { type: "json_schema", json_schema: schema },
-      messages: [
-        { role: "system", content: systemPrompt(ctx) },
-        { role: "user", content: userPrompt(action, body) },
-      ],
-    }, controller.signal);
+    const res = await structured(MODEL, schema, [
+      { role: "system", content: systemPrompt(ctx) },
+      { role: "user", content: userPrompt(action, body) },
+    ], action === "meal_plan" || action === "generate_recipes" ? 0.8 : 0.5, controller.signal);
     if (!res.ok) {
       return await upstreamError(req, action, res);
     }
@@ -229,7 +263,7 @@ Deno.serve(async (req) => {
     if (!content) return json(req, { error: "empty_response" }, 502);
     let parsed: unknown;
     try {
-      parsed = JSON.parse(content);
+      parsed = parseJson(content);
     } catch {
       return json(req, { error: "malformed_response" }, 502);
     }

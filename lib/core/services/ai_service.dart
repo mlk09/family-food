@@ -244,7 +244,7 @@ class AIService {
     } catch (_) {}
     debugPrint('AI error $status: $error / $detail');
     if (error == 'ai_not_configured') {
-      throw const AppFailure(FailureKind.ai, 'Chef AI is not set up yet (OpenAI key missing on the server).');
+      throw const AppFailure(FailureKind.ai, 'Chef AI is not set up yet (AI key missing on the server).');
     }
     switch (detail) {
       case 'insufficient_quota':
@@ -254,6 +254,12 @@ class AIService {
         throw const AppFailure(FailureKind.ai, 'The OpenAI key on the server is not valid. Please create a new key and update it.');
       case 'model_not_found':
         throw const AppFailure(FailureKind.ai, "The OpenAI account can't use the selected model. Check OPENAI_MODEL.");
+      case 'RESOURCE_EXHAUSTED':
+      case 'http_429':
+        throw const AppFailure(FailureKind.ai, "Chef AI's free limit is used up for now. Please try again later.");
+      case 'PERMISSION_DENIED':
+      case 'UNAUTHENTICATED':
+        throw const AppFailure(FailureKind.ai, 'The AI key on the server is not valid. Please create a new key and update it.');
       case 'rate_limit_exceeded':
         throw const AppFailure(FailureKind.ai, 'Chef AI is busy right now. Please try again in a minute.');
     }
