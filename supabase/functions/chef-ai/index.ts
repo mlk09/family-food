@@ -41,7 +41,7 @@ const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const ANON_KEY = Deno.env.get("SUPABASE_ANON_KEY")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 
-const ACTIONS = new Set(["generate_recipes", "recipe_detail", "meal_plan", "substitutions", "shopping_list", "scan_ingredients", "chat"]);
+const ACTIONS = new Set(["diag", "generate_recipes", "recipe_detail", "meal_plan", "substitutions", "shopping_list", "scan_ingredients", "chat"]);
 const MAX_BODY_BYTES = 2_000_000; // ~1.4 MB image after base64
 const TIMEOUT_MS = 42_000;
 
@@ -205,6 +205,27 @@ Deno.serve(async (req) => {
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
 
   try {
+    // ── Diagnostics: which models answer from this server (logged-in users only) ──
+    if (action === "diag") {
+      if (!userId) return json(req, { error: "unauthorized" }, 401);
+      const results = [];
+      for (const m of MODEL_CHAIN) {
+        const t0 = Date.now();
+        try {
+          const r = await fetch(`${API_BASE}/chat/completions`, {
+            method: "POST",
+            headers: { "Authorization": `Bearer ${API_KEY}`, "Content-Type": "application/json" },
+            body: JSON.stringify({ model: m, messages: [{ role: "user", content: "Say OK" }] }),
+            signal: AbortSignal.timeout(12_000),
+          });
+          results.push({ model: m, status: r.status, ms: Date.now() - t0, body: (await r.text()).slice(0, 160) });
+        } catch (e) {
+          results.push({ model: m, status: 0, ms: Date.now() - t0, body: String(e).slice(0, 160) });
+        }
+      }
+      return json(req, { provider: PROVIDER, results });
+    }
+
     // ── Streaming chat ──
     if (action === "chat") {
       const history = (Array.isArray(body.messages) ? body.messages : [])
