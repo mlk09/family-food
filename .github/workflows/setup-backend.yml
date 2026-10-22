@@ -37,11 +37,12 @@ jobs:
             echo "::error::Missing repository secrets:$missing (Settings → Secrets and variables → Actions)"
             exit 1
           fi
-          REF=$(echo "$SUPABASE_URL" | sed -E 's#^https://([a-z0-9]+)\.supabase\.co/?$#\1#')
-          if [ "$REF" = "$SUPABASE_URL" ] || [ -z "$REF" ]; then
-            echo "::error::SUPABASE_URL must look like https://abcdefgh.supabase.co"
+          CLEAN=$(.github/scripts/normalize_supabase_url.sh "$SUPABASE_URL") || {
+            echo "::error::SUPABASE_URL is not a Supabase Project URL (see hints above). Expected https://<ref>.supabase.co"
             exit 1
-          fi
+          }
+          REF=$(echo "$CLEAN" | sed -E 's#https://([a-z0-9]+)\.supabase\.co#\1#')
+          echo "SUPABASE_URL=$CLEAN" >> "$GITHUB_ENV"
           echo "PROJECT_REF=$REF" >> "$GITHUB_ENV"
           echo "Supabase project: $REF"
 

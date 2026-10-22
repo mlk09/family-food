@@ -45,9 +45,14 @@ jobs:
       - uses: subosito/flutter-action@v2
         with: { channel: stable, cache: true }
       - name: Write .env from secrets
+        env:
+          RAW_URL: ${{ secrets.SUPABASE_URL }}
+          RAW_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          printf 'SUPABASE_URL=%s\nSUPABASE_ANON_KEY=%s\nAI_FUNCTION_NAME=chef-ai\nAUTH_REDIRECT_URL=familyfood://login-callback\n' \
-            "${{ secrets.SUPABASE_URL }}" "${{ secrets.SUPABASE_ANON_KEY }}" > .env
+          URL=$(.github/scripts/normalize_supabase_url.sh "$RAW_URL" 2>/dev/null || true)
+          KEY=$(printf '%s' "$RAW_KEY" | tr -d '[:space:]"')
+          [ -z "$URL" ] && echo "::warning::SUPABASE_URL missing or invalid — building in Demo-only mode"
+          printf 'SUPABASE_URL=%s\nSUPABASE_ANON_KEY=%s\nAI_FUNCTION_NAME=chef-ai\nAUTH_REDIRECT_URL=familyfood://login-callback\n' "$URL" "$KEY" > .env
       - name: Release signing (optional)
         if: env.HAS_KEYSTORE == 'true'
         env: { KS: "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" }
@@ -75,9 +80,14 @@ jobs:
       - uses: subosito/flutter-action@v2
         with: { channel: stable, cache: true }
       - name: Write .env from secrets
+        env:
+          RAW_URL: ${{ secrets.SUPABASE_URL }}
+          RAW_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
         run: |
-          printf 'SUPABASE_URL=%s\nSUPABASE_ANON_KEY=%s\nAI_FUNCTION_NAME=chef-ai\n' \
-            "${{ secrets.SUPABASE_URL }}" "${{ secrets.SUPABASE_ANON_KEY }}" > .env
+          URL=$(.github/scripts/normalize_supabase_url.sh "$RAW_URL" 2>/dev/null || true)
+          KEY=$(printf '%s' "$RAW_KEY" | tr -d '[:space:]"')
+          [ -z "$URL" ] && echo "::warning::SUPABASE_URL missing or invalid — building in Demo-only mode"
+          printf 'SUPABASE_URL=%s\nSUPABASE_ANON_KEY=%s\nAI_FUNCTION_NAME=chef-ai\nAUTH_REDIRECT_URL=familyfood://login-callback\n' "$URL" "$KEY" > .env
       - name: Link the latest released APK (only if a release with the APK exists)
         env: { GH_TOKEN: "${{ github.token }}" }
         run: |
