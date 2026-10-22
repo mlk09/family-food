@@ -74,9 +74,12 @@ async function openai(body: Record<string, unknown>, signal: AbortSignal): Promi
       signal: s,
     });
   // Vision may pin a specific model; otherwise walk the chain.
-  const chain = model === MODEL ? MODEL_CHAIN : [model];
+  const base = model === MODEL ? MODEL_CHAIN : [model];
+  // Two passes: overload spikes on the free tier usually clear within seconds.
+  const chain = [...base, ...base];
   let last: Response | null = null;
   for (let i = 0; i < chain.length; i++) {
+    if (i === base.length) await new Promise((r) => setTimeout(r, 2000));
     if (signal.aborted) break;
     const attempt = new AbortController();
     const onAbort = () => attempt.abort();
