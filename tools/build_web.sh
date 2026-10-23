@@ -20,6 +20,7 @@ flutter build web --release --base-href /app/ --no-web-resources-cdn "${DEFINES[
 rm -rf deploy && mkdir -p deploy/app
 cp -r build/web/. deploy/app/
 cp web_download/index.html web_download/config.js web_download/icon.png deploy/
+[ -f web_download/qr.png ] && cp web_download/qr.png deploy/
 # Single-page-app fallback for hosts that support it (Netlify/Cloudflare).
 printf '/app/*  /app/index.html  200\n' > deploy/_redirects
 touch deploy/.nojekyll

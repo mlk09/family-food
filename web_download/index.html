@@ -121,7 +121,8 @@
       } else if (isIOS && hasIOS && /testflight/i.test(c.iosUrl)) {
         help.innerHTML = "<h2>Installing on iPhone</h2><ol><li>Install Apple's free <b>TestFlight</b> app.</li><li>Tap <b>Download for iPhone</b> and accept the invite.</li></ol>";
       } else {
-        help.innerHTML = "<h2>On a computer?</h2>Scan this page's QR code with your phone, or open the Web App right here.";
+        help.innerHTML = "<h2>On a computer?</h2>Scan this with your phone camera to install, or open the Web App right here." +
+          '<img src="qr.png" alt="QR code to open this page on your phone" style="display:block;width:220px;max-width:100%;margin:14px auto 4px;border-radius:16px;background:#fff">';
       }
       $("footer").textContent = "Version " + (c.version || "1.0.0") + " · AI suggestions can make mistakes — always check allergens.";
     })();

@@ -109,7 +109,7 @@ jobs:
         run: |
           flutter build web --release --no-web-resources-cdn --base-href "/${{ github.event.repository.name }}/app/" --dart-define-from-file=.env
           mkdir -p deploy/app && cp -r build/web/. deploy/app/
-          cp web_download/index.html web_download/config.js web_download/icon.png deploy/ && touch deploy/.nojekyll
+          cp web_download/index.html web_download/config.js web_download/icon.png web_download/qr.png deploy/ && touch deploy/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with: { path: deploy }
