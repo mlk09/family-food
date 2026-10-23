@@ -55,6 +55,11 @@
         </receiver>
         <!-- Don't delete the meta-data below.
              This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
+        <!-- Impeller (Vulkan) shows a blank white screen on some Xiaomi/Redmi
+             GPUs; the OpenGL renderer works everywhere. -->
+        <meta-data
+            android:name="io.flutter.embedding.android.EnableImpeller"
+            android:value="false" />
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
