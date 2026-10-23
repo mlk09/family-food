@@ -50,19 +50,30 @@ jobs:
             "${{ secrets.ANDROID_KEY_ALIAS }}" "${{ secrets.ANDROID_KEY_PASSWORD }}" "${{ secrets.ANDROID_STORE_PASSWORD }}" > android/key.properties
       - run: flutter pub get
       - run: flutter test
+      # Small per-device APKs (~20 MB) + one universal APK for very old phones.
+      - run: flutter build apk --release --split-per-abi --dart-define-from-file=.env
+      - run: |
+          mv build/app/outputs/flutter-apk/app-arm64-v8a-release.apk family-food-assistant.apk
+          mv build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk family-food-assistant-old-phones.apk
       - run: flutter build apk --release --dart-define-from-file=.env
-      - run: mv build/app/outputs/flutter-apk/app-release.apk family-food-assistant.apk
+      - run: |
+          mv build/app/outputs/flutter-apk/app-release.apk family-food-assistant-universal.apk
+          ls -lh *.apk
       - name: Publish GitHub Release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: v${{ inputs.version }}
           target_commitish: ${{ github.sha }}
           name: Family Food Assistant ${{ inputs.version }}
-          files: family-food-assistant.apk
+          files: |
+            family-food-assistant.apk
+            family-food-assistant-old-phones.apk
+            family-food-assistant-universal.apk
           body: |
             🍳 **Family Food Assistant ${{ inputs.version }}**
 
-            **Install on Android:** download `family-food-assistant.apk` below, open it, allow "install unknown apps", tap Install.
+            **Install on Android:** download `family-food-assistant.apk` (most phones, ~20 MB), open it from the notification or Files → Downloads, allow "install unknown apps", tap Install.
+            Very old phone and it says "App not installed"? Use `family-food-assistant-old-phones.apk` (or `-universal.apk`).
             **iPhone / any phone:** open the web app — https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
 
             Features: kitchen inventory, What Can I Cook?, Chef AI (Hindi/English, voice), photo scan, meal planner, shopping list, family sharing.

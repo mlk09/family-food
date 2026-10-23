@@ -8,6 +8,9 @@ window.FFA_CONFIG = {
   // "https://github.com/<you>/<repo>/releases/download/v1.0.0/family-food-assistant.apk"
   androidApkUrl: "",
 
+  // Bigger APK that also works on very old (32-bit) phones. Filled in by CI.
+  androidApkLegacyUrl: "",
+
   // Google Play listing (optional, preferred over the APK when set).
   playStoreUrl: "",
 

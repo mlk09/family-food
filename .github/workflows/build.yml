@@ -100,7 +100,11 @@ jobs:
                  --jq 'select([.assets[].name] | index("family-food-assistant.apk")) | .tag_name' 2>/dev/null || true)
           if [ -n "$TAG" ]; then
             APK="https://github.com/${{ github.repository }}/releases/latest/download/family-food-assistant.apk"
-            sed -i "s|androidApkUrl: \"\"|androidApkUrl: \"$APK\"|; s|version: \"1.0.0\"|version: \"${TAG#v}\"|" web_download/config.js
+            OLD=""
+            if gh api "repos/${{ github.repository }}/releases/latest" --jq '[.assets[].name] | index("family-food-assistant-universal.apk")' | grep -qv null; then
+              OLD="https://github.com/${{ github.repository }}/releases/latest/download/family-food-assistant-universal.apk"
+            fi
+            sed -i "s|androidApkUrl: \"\"|androidApkUrl: \"$APK\"|; s|androidApkLegacyUrl: \"\"|androidApkLegacyUrl: \"$OLD\"|; s|version: \"1.0.0\"|version: \"${TAG#v}\"|" web_download/config.js
             echo "::notice title=Download page::Android button links the APK from release $TAG"
           else
             echo "No release with an APK yet — Android button will say 'coming soon'."

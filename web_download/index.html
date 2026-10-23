@@ -51,6 +51,7 @@
     .features div { background: var(--card); border: 1px solid var(--border); border-radius: 18px; padding: 12px 6px; font-size: 13px; color: var(--muted); }
     .features div span { display: block; font-size: 24px; margin-bottom: 4px; }
     footer { margin-top: 26px; color: var(--muted); font-size: 13px; }
+    .help a { color: var(--saffron); font-weight: 700; }
   </style>
 </head>
 <body>
@@ -78,6 +79,16 @@
       <span><b>Open Web App</b><small id="web-sub">Works on any phone or computer</small></span>
     </a>
 
+    <div class="help" id="installing" hidden>
+      <h2>⬇️ Download shuru ho gaya</h2>
+      <ol>
+        <li>Upar <b>notification bar</b> mein download poora hone do (~20 MB).</li>
+        <li>Notification par tap karo — ya <b>Files → Downloads</b> mein <b>family-food-assistant.apk</b> kholo.</li>
+        <li>Poochhe to <b>Settings → Allow from this source</b>, phir wapas aakar <b>Install</b>.</li>
+        <li>"Play Protect" warning aaye to <b>Install anyway</b>.</li>
+      </ol>
+      <p id="legacy" hidden style="margin:10px 0 0">"App not installed" aaye? Purane phone ke liye <a id="legacy-link" href="#">yeh wala APK</a> download karo.</p>
+    </div>
     <div class="help" id="help"></div>
     <footer id="footer"></footer>
   </main>
@@ -99,9 +110,21 @@
       }
 
       var androidUrl = c.playStoreUrl || c.androidApkUrl;
-      var hasAndroid = setup("android", androidUrl, c.playStoreUrl ? "Get it on Google Play" : "Install the APK (v" + (c.version || "1.0") + ")", "Android version coming soon");
+      var hasAndroid = setup("android", androidUrl, c.playStoreUrl ? "Get it on Google Play" : "APK v" + (c.version || "1.0") + " · ~20 MB", "Android version coming soon");
       var hasIOS = setup("ios", c.iosUrl, /testflight/i.test(c.iosUrl || "") ? "Install with TestFlight" : "Get it on the App Store", "iPhone version coming soon — use the Web App for now");
       var hasWeb = setup("web", c.webAppUrl, "Works on any phone or computer", "Web app coming soon");
+
+      // The browser downloads the APK in the background and the page stays put,
+      // so tell people exactly what to do next.
+      if (hasAndroid && !c.playStoreUrl) {
+        $("android").addEventListener("click", function () {
+          $("installing").hidden = false;
+          $("help").hidden = true;
+          if (c.androidApkLegacyUrl) { $("legacy").hidden = false; $("legacy-link").href = c.androidApkLegacyUrl; }
+          $("android-sub").textContent = "Downloading… notification bar dekho";
+          setTimeout(function () { $("installing").scrollIntoView({ behavior: "smooth", block: "center" }); }, 300);
+        });
+      }
 
       // Highlight the best option for this device.
       var primary = isAndroid ? (hasAndroid ? "android" : "web") : isIOS ? (hasIOS ? "ios" : "web") : (hasWeb ? "web" : null);
