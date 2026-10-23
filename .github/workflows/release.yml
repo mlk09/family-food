@@ -1,0 +1,71 @@
+# One-click release: builds the Android APK, publishes a GitHub Release with it
+# (stable download link), then rebuilds the download page so its
+# "Download for Android" button points at the new APK.
+# Actions → release → Run workflow → enter a version like 1.0.0.
+name: release
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version (e.g. 1.0.0)"
+        required: true
+        default: "1.0.0"
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    env:
+      HAS_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 != '' }}
+      VERSION: ${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v5
+      - name: Check version
+        run: |
+          [[ "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::Version must look like 1.0.0"; exit 1; }
+          sed -i -E "s/^version: .*/version: $VERSION+${{ github.run_number }}/" pubspec.yaml
+          grep '^version:' pubspec.yaml
+      - uses: actions/setup-java@v5
+        with: { distribution: temurin, java-version: "17" }
+      - uses: subosito/flutter-action@v2
+        with: { channel: stable, cache: true }
+      - name: Write .env from secrets
+        env:
+          RAW_URL: ${{ secrets.SUPABASE_URL }}
+          RAW_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        run: |
+          URL=$(.github/scripts/normalize_supabase_url.sh "$RAW_URL" 2>/dev/null || true)
+          KEY=$(printf '%s' "$RAW_KEY" | tr -d '[:space:]"')
+          printf 'SUPABASE_URL=%s\nSUPABASE_ANON_KEY=%s\nAI_FUNCTION_NAME=chef-ai\nAUTH_REDIRECT_URL=familyfood://login-callback\n' "$URL" "$KEY" > .env
+      - name: Release signing (optional)
+        if: env.HAS_KEYSTORE == 'true'
+        env: { KS: "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" }
+        run: |
+          echo "$KS" | base64 -d > android/app/upload-keystore.jks
+          printf 'storeFile=upload-keystore.jks\nkeyAlias=%s\nkeyPassword=%s\nstorePassword=%s\n' \
+            "${{ secrets.ANDROID_KEY_ALIAS }}" "${{ secrets.ANDROID_KEY_PASSWORD }}" "${{ secrets.ANDROID_STORE_PASSWORD }}" > android/key.properties
+      - run: flutter pub get
+      - run: flutter test
+      - run: flutter build apk --release --dart-define-from-file=.env
+      - run: mv build/app/outputs/flutter-apk/app-release.apk family-food-assistant.apk
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ inputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: Family Food Assistant ${{ inputs.version }}
+          files: family-food-assistant.apk
+          body: |
+            🍳 **Family Food Assistant ${{ inputs.version }}**
+
+            **Install on Android:** download `family-food-assistant.apk` below, open it, allow "install unknown apps", tap Install.
+            **iPhone / any phone:** open the web app — https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/
+
+            Features: kitchen inventory, What Can I Cook?, Chef AI (Hindi/English, voice), photo scan, meal planner, shopping list, family sharing.
+      - name: Refresh the download page so it links this APK
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: gh workflow run build.yml --repo "${{ github.repository }}" --ref main
