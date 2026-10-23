@@ -21,6 +21,7 @@ permissions:
   contents: write
   pages: write
   id-token: write
+  actions: write   # lets a release refresh the download page
 
 jobs:
   test:
@@ -68,6 +69,10 @@ jobs:
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with: { files: family-food-assistant.apk }
+      - name: Refresh the download page so it links this APK
+        if: startsWith(github.ref, 'refs/tags/v')
+        env: { GH_TOKEN: "${{ github.token }}" }
+        run: gh workflow run build.yml --repo "${{ github.repository }}" --ref main
 
   web:
     needs: test
