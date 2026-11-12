@@ -8,7 +8,7 @@ import '../data/session.dart';
 import 'app_router.dart';
 
 /// Bottom navigation (Home, My Kitchen, Meal Plan, Shopping, Profile) with the
-/// floating 🤖 Chef AI button.
+/// floating 👨‍🍳 Chef AI button.
 class AppShell extends ConsumerWidget {
   const AppShell({super.key, required this.shell});
   final StatefulNavigationShell shell;
@@ -168,7 +168,7 @@ class _ChefFabState extends State<_ChefFab> with SingleTickerProviderStateMixin 
                 HapticFeedback.mediumImpact();
                 widget.onTap();
               },
-              child: const Center(child: Text('🤖', style: TextStyle(fontSize: 30))),
+              child: const Center(child: Text('👨‍🍳', style: TextStyle(fontSize: 30))),
             ),
           ),
         ),

@@ -47,8 +47,11 @@ class VoiceService {
     return out.join(' ');
   }
 
-  /// Removes markdown, bullets and emoji so the voice doesn't read symbols.
+  /// Removes markdown, bullets and emoji so the voice doesn't read symbols,
+  /// and reads ranges like "2-3 मिनट" as "2 से 3" instead of "2 minus 3".
   static String speakable(String text) => text
+      .replaceAllMapped(RegExp(r'(\d+(?:\.\d+)?)\s*[-–—]\s*(\d+(?:\.\d+)?)'),
+          (m) => '${m[1]} ${languageFor(text) == 'hi-IN' ? 'से' : 'to'} ${m[2]}')
       .replaceAll(RegExp(r'\*\*|__|`|#+\s|_\(|\)_'), '')
       .replaceAll(RegExp(r'^\s*[•\-*]\s*', multiLine: true), '')
       .replaceAll(RegExp(r'[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]', unicode: true), '')

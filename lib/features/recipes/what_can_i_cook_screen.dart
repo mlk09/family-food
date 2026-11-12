@@ -188,7 +188,7 @@ class _WhatCanICookScreenState extends ConsumerState<WhatCanICookScreen> {
                     const EmptyState(
                       emoji: '🤔',
                       title: 'No matches yet',
-                      message: 'Try removing a filter, or ask Chef AI for ideas using the 🤖 button.',
+                      message: 'Try removing a filter, or ask Chef AI for ideas using the 👨‍🍳 button.',
                     ),
                 ],
               ),

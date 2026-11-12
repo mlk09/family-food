@@ -128,7 +128,7 @@ class _ChefChatScreenState extends ConsumerState<ChefChatScreen> {
             height: 42,
             alignment: Alignment.center,
             decoration: const BoxDecoration(gradient: AppColors.aiGradient, shape: BoxShape.circle),
-            child: const Text('🤖', style: TextStyle(fontSize: 22)),
+            child: const Text('👨‍🍳', style: TextStyle(fontSize: 22)),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -280,7 +280,7 @@ class _ChefChatScreenState extends ConsumerState<ChefChatScreen> {
                     onSubmitted: (_) => _send(),
                     style: const TextStyle(fontSize: 17),
                     decoration: InputDecoration(
-                      hintText: _voice.listening.value ? '🎤 Sun raha hoon… boliye' : 'Likho ya 🎤 dabakar bolo',
+                      hintText: _voice.listening.value ? '🎤 Sun raha hoon… boliye' : 'Tap to speak',
                       counterText: '',
                     ),
                   ),

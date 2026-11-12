@@ -17,6 +17,12 @@ void main() {
     expect(s, contains('rupees'));
   });
 
+  test('reads number ranges as "2 se 3", not "2 minus 3"', () {
+    expect(VoiceService.speakable('2-3 मिनट और पकाएं'), '2 से 3 मिनट और पकाएं');
+    expect(VoiceService.speakable('Cook for 10 – 12 min'), 'Cook for 10 to 12 min');
+    expect(VoiceService.speakable('Use -2 spoons? No, 1.5-2 spoons'), 'Use -2 spoons? No, 1.5 to 2 spoons');
+  });
+
   test('removes words and phrases repeated by the speech engine', () {
     expect(VoiceService.dedupe('pyaz pyaz nahi nahi hai hai'), 'pyaz nahi hai');
     expect(VoiceService.dedupe('pyaz nahi hai pyaz nahi hai'), 'pyaz nahi hai');

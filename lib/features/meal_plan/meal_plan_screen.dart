@@ -33,7 +33,7 @@ Future<void> openMealItem(BuildContext context, WidgetRef ref, MealPlanItem item
     emoji: item.emoji,
     description: item.description,
     ingredients: [for (final i in item.ingredients) RecipeIngredient(name: i)],
-    instructions: const ['Ask Chef AI for step-by-step instructions using the 🤖 button below.'],
+    instructions: const ['Ask Chef AI for step-by-step instructions using the 👨‍🍳 button below.'],
     source: 'ai',
   );
   if (ai.isAvailable) {

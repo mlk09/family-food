@@ -75,7 +75,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
     List<Substitution> subs = r.substitutions.where((s) => IngredientNames.matches(s.ingredient, ingredient)).toList();
     var fromAi = false;
     if (ai.isAvailable) {
-      showSnack(context, '🤖 Asking Chef AI…');
+      showSnack(context, '👨‍🍳 Asking Chef AI…');
       try {
         final res = await ai.suggestSubstitutions(ingredient, r.name, ref.read(aiContextProvider));
         if (res.isNotEmpty) {
@@ -324,7 +324,7 @@ class _RecipeDetailScreenState extends ConsumerState<RecipeDetailScreen> {
             _RoundAction(icon: Icons.add_shopping_cart_rounded, color: AppColors.herb, label: 'Add missing', onTap: () => _addMissing(r)),
             const SizedBox(width: 8),
             _RoundAction(
-              emoji: '🤖',
+              emoji: '👨‍🍳',
               color: AppColors.berry,
               label: 'Ask Chef AI',
               onTap: () => context.push(Routes.chef, extra: r),

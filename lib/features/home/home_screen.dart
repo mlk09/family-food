@@ -134,7 +134,7 @@ class HomeScreen extends ConsumerWidget {
                 gradient: LinearGradient(colors: [AppColors.berry.withValues(alpha: 0.18), AppColors.tomato.withValues(alpha: 0.10)]),
                 child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
                   Row(children: [
-                    const Text('🤖', style: TextStyle(fontSize: 30)),
+                    const Text('👨‍🍳', style: TextStyle(fontSize: 30)),
                     const SizedBox(width: 12),
                     Expanded(
                       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
