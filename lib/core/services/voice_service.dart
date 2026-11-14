@@ -52,7 +52,7 @@ class VoiceService {
   static String speakable(String text) => text
       .replaceAllMapped(RegExp(r'(\d+(?:\.\d+)?)\s*[-–—]\s*(\d+(?:\.\d+)?)'),
           (m) => '${m[1]} ${languageFor(text) == 'hi-IN' ? 'से' : 'to'} ${m[2]}')
-      .replaceAll(RegExp(r'\*\*|__|`|#+\s|_\(|\)_'), '')
+      .replaceAll(RegExp(r'\*+|__|`|#+\s|_\(|\)_'), '') // never read "*" aloud (तारांकन)
       .replaceAll(RegExp(r'^\s*[•\-*]\s*', multiLine: true), '')
       .replaceAll(RegExp(r'[\u{1F000}-\u{1FAFF}\u{2600}-\u{27BF}\u{FE0F}\u{200D}]', unicode: true), '')
       .replaceAll('₹', ' rupees ')

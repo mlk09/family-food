@@ -401,7 +401,7 @@ class SafetyBanner extends StatelessWidget {
   }
 }
 
-/// Very small markdown subset for chat: **bold**, _italic_, bullet lines.
+/// Very small markdown subset for chat: **bold**, *italic* / _italic_, bullet lines.
 class RichMessage extends StatelessWidget {
   const RichMessage(this.text, {super.key, this.style});
   final String text;
@@ -411,7 +411,7 @@ class RichMessage extends StatelessWidget {
   Widget build(BuildContext context) {
     final base = style ?? context.text.bodyLarge!;
     final spans = <InlineSpan>[];
-    final re = RegExp(r'\*\*(.+?)\*\*|(?<![\w])_(.+?)_(?![\w])');
+    final re = RegExp(r'\*\*(.+?)\*\*|(?<![\w])_(.+?)_(?![\w])|(?<![\w*])\*(?!\s)(.+?)\*(?![\w*])');
     var last = 0;
     final t = text.replaceAll(RegExp(r'^#{1,4}\s*', multiLine: true), '').replaceAll(RegExp(r'^\s*[-*]\s+', multiLine: true), '• ');
     for (final m in re.allMatches(t)) {
@@ -419,7 +419,7 @@ class RichMessage extends StatelessWidget {
       if (m.group(1) != null) {
         spans.add(TextSpan(text: m.group(1), style: const TextStyle(fontWeight: FontWeight.w700)));
       } else {
-        spans.add(TextSpan(text: m.group(2), style: TextStyle(fontStyle: FontStyle.italic, color: context.palette.muted)));
+        spans.add(TextSpan(text: m.group(2) ?? m.group(3), style: TextStyle(fontStyle: FontStyle.italic, color: context.palette.muted)));
       }
       last = m.end;
     }

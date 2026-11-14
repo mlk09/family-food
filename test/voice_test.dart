@@ -17,6 +17,11 @@ void main() {
     expect(s, contains('rupees'));
   });
 
+  test('never reads asterisks aloud', () {
+    expect(VoiceService.speakable('*रसोई सुरक्षा टिप:* गरम पैन सावधानी से'), 'रसोई सुरक्षा टिप: गरम पैन सावधानी से');
+    expect(VoiceService.speakable('***Tip*** use * less oil'), 'Tip use less oil');
+  });
+
   test('reads number ranges as "2 se 3", not "2 minus 3"', () {
     expect(VoiceService.speakable('2-3 मिनट और पकाएं'), '2 से 3 मिनट और पकाएं');
     expect(VoiceService.speakable('Cook for 10 – 12 min'), 'Cook for 10 to 12 min');
