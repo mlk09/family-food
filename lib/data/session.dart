@@ -105,6 +105,26 @@ class SessionNotifier extends Notifier<AppSession> {
 
 final sessionProvider = NotifierProvider<SessionNotifier, AppSession>(SessionNotifier.new);
 
+/// True after the user opens a "reset password" email link: Supabase signs
+/// them in with a recovery session and the app must ask for a new password.
+class PasswordRecoveryNotifier extends Notifier<bool> {
+  @override
+  bool build() {
+    final sub = ref.watch(authServiceProvider).changes.listen((s) {
+      // Supabase replays past events to new listeners, so also clear the flag
+      // once the password was changed or the user signed out.
+      if (s.event == AuthChangeEvent.passwordRecovery) state = true;
+      if (s.event == AuthChangeEvent.userUpdated || s.event == AuthChangeEvent.signedOut) state = false;
+    });
+    ref.onDispose(sub.cancel);
+    return false;
+  }
+
+  void done() => state = false;
+}
+
+final passwordRecoveryProvider = NotifierProvider<PasswordRecoveryNotifier, bool>(PasswordRecoveryNotifier.new);
+
 final localStoreProvider = Provider<LocalStore>((ref) {
   final session = ref.watch(sessionProvider);
   return LocalStore(ref.watch(sharedPrefsProvider), session.namespace);

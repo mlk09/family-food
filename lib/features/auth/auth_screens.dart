@@ -428,3 +428,82 @@ class _ForgotPasswordScreenState extends ConsumerState<ForgotPasswordScreen> {
     );
   }
 }
+
+// ───────────────────────── New password (from reset email) ─────────────────────────
+
+class NewPasswordScreen extends ConsumerStatefulWidget {
+  const NewPasswordScreen({super.key});
+
+  @override
+  ConsumerState<NewPasswordScreen> createState() => _NewPasswordScreenState();
+}
+
+class _NewPasswordScreenState extends ConsumerState<NewPasswordScreen> {
+  final _form = GlobalKey<FormState>();
+  final _password = TextEditingController();
+  final _confirm = TextEditingController();
+  bool _busy = false, _hide = true;
+
+  @override
+  void dispose() {
+    _password.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    if (!_form.currentState!.validate()) return;
+    setState(() => _busy = true);
+    try {
+      await ref.read(authServiceProvider).updatePassword(_password.text);
+      if (!mounted) return;
+      showSnack(context, '✅ Password badal gaya. Agli baar naye password se login karein.');
+      ref.read(passwordRecoveryProvider.notifier).done();
+    } catch (e) {
+      if (mounted) showSnack(context, friendlyError(e));
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    InputDecoration field(String label) => InputDecoration(
+          labelText: label,
+          prefixIcon: const Icon(Icons.lock_outline_rounded),
+          suffixIcon: IconButton(
+            icon: Icon(_hide ? Icons.visibility_outlined : Icons.visibility_off_outlined),
+            onPressed: () => setState(() => _hide = !_hide),
+          ),
+        );
+    return _AuthScaffold(
+      title: 'Naya password banao',
+      subtitle: 'Reset link se aaye ho – ab apna naya password daalo',
+      icon: Icons.lock_reset_rounded,
+      children: [
+        Form(
+          key: _form,
+          child: Column(children: [
+            TextFormField(
+              controller: _password,
+              obscureText: _hide,
+              textInputAction: TextInputAction.next,
+              decoration: field('Naya password'),
+              validator: Validators.password,
+            ),
+            const SizedBox(height: 14),
+            TextFormField(
+              controller: _confirm,
+              obscureText: _hide,
+              onFieldSubmitted: (_) => _submit(),
+              decoration: field('Password dobara likho'),
+              validator: (v) => v == _password.text ? null : 'Dono password ek jaise nahi hain',
+            ),
+          ]),
+        ),
+        const SizedBox(height: 20),
+        GradientButton(label: 'Password save karo', icon: Icons.check_rounded, loading: _busy, onPressed: _submit),
+      ],
+    );
+  }
+}

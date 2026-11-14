@@ -29,6 +29,7 @@ class Routes {
   static const login = '/login';
   static const signup = '/signup';
   static const forgot = '/forgot';
+  static const newPassword = '/new-password';
   static const home = '/home';
   static const kitchen = '/kitchen';
   static const plan = '/plan';
@@ -53,6 +54,7 @@ class _RouterRefresh extends ChangeNotifier {
 final routerProvider = Provider<GoRouter>((ref) {
   final refresh = _RouterRefresh();
   ref.listen(sessionProvider, (_, _) => refresh.ping());
+  ref.listen(passwordRecoveryProvider, (_, _) => refresh.ping());
   ref.onDispose(refresh.dispose);
 
   const publicRoutes = {Routes.splash, Routes.onboarding, Routes.login, Routes.signup, Routes.forgot};
@@ -64,6 +66,11 @@ final routerProvider = Provider<GoRouter>((ref) {
       final loc = state.matchedLocation;
       if (loc == Routes.splash) return null;
       final session = ref.read(sessionProvider);
+      // Opened from a password-reset email: ask for the new password first.
+      if (ref.read(passwordRecoveryProvider) && session.isCloud) {
+        return loc == Routes.newPassword ? null : Routes.newPassword;
+      }
+      if (loc == Routes.newPassword) return Routes.home;
       final onboarded = ref.read(sharedPrefsProvider).getBool(onboardingSeenKey) ?? false;
       final isPublic = publicRoutes.contains(loc);
       if (!session.isSignedIn) {
@@ -79,6 +86,7 @@ final routerProvider = Provider<GoRouter>((ref) {
       GoRoute(path: Routes.login, builder: (_, _) => const LoginScreen()),
       GoRoute(path: Routes.signup, builder: (_, _) => const SignUpScreen()),
       GoRoute(path: Routes.forgot, builder: (_, _) => const ForgotPasswordScreen()),
+      GoRoute(path: Routes.newPassword, builder: (_, _) => const NewPasswordScreen()),
       StatefulShellRoute.indexedStack(
         builder: (context, state, shell) => AppShell(shell: shell),
         branches: [
